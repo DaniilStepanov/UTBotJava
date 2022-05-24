@@ -26,18 +26,17 @@ import org.utbot.framework.plugin.api.UtNullModel
 import org.utbot.framework.plugin.api.UtPrimitiveModel
 import org.utbot.framework.plugin.api.UtReferenceModel
 import org.utbot.framework.plugin.api.util.id
+import org.utbot.framework.plugin.api.util.objectArrayClassId
 import org.utbot.framework.plugin.api.util.objectClassId
 import soot.Scene
+import soot.SootClass
+import soot.SootField
 import soot.SootMethod
+import soot.Type
 
 val rangeModifiableArrayId: ClassId = RangeModifiableUnlimitedArray::class.id
 
 class RangeModifiableUnlimitedArrayWrapper : WrapperInterface {
-    private val rangeModifiableArrayClass = Scene.v().getSootClass(rangeModifiableArrayId.name)
-    private val beginField = rangeModifiableArrayClass.getField("int begin")
-    private val endField = rangeModifiableArrayClass.getField("int end")
-    private val storageField = rangeModifiableArrayClass.getField("java.lang.Object[] storage")
-
     override fun UtBotSymbolicEngine.invoke(
         wrapper: ObjectValue,
         method: SootMethod,
@@ -233,7 +232,7 @@ class RangeModifiableUnlimitedArrayWrapper : WrapperInterface {
 
         val resultModel = UtArrayModel(
             concreteAddr,
-            objectClassId,
+            objectArrayClassId,
             sizeValue,
             UtNullModel(objectClassId),
             mutableMapOf()
@@ -253,6 +252,19 @@ class RangeModifiableUnlimitedArrayWrapper : WrapperInterface {
         }
 
         return resultModel
+    }
+
+    companion object {
+        internal val rangeModifiableArrayClass: SootClass
+            get() = Scene.v().getSootClass(rangeModifiableArrayId.name)
+        internal val rangeModifiableArrayType: Type
+            get() = rangeModifiableArrayClass.type
+        internal val beginField: SootField
+            get() = rangeModifiableArrayClass.getField("int begin")
+        internal val endField: SootField
+            get() = rangeModifiableArrayClass.getField("int end")
+        internal val storageField: SootField
+            get() = rangeModifiableArrayClass.getField("java.lang.Object[] storage")
     }
 }
 

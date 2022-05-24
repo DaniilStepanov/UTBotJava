@@ -177,8 +177,14 @@ class Mocker(
         if (mockAlways(type)) return true // always mock randoms and loggers
         if (type.sootClass.isArtificialEntity) return false // never mock artificial types, i.e. Maps$lambda_computeValue_1__7
         if (mockInfo is UtFieldMockInfo) {
+            val declaringClass = mockInfo.fieldId.declaringClass
+
+            if (Scene.v().getSootClass(declaringClass.name).isArtificialEntity) {
+                return false // see BaseStreamExample::minExample for an example; cannot load java class for such class
+            }
+
             return when {
-                mockInfo.fieldId.declaringClass.packageName.startsWith("java.lang") -> false
+                declaringClass.packageName.startsWith("java.lang") -> false
                 !mockInfo.fieldId.type.isRefType -> false  // mocks are allowed for ref fields only
                 else -> return strategy.eligibleToMock(mockInfo.fieldId.type, classUnderTest) // if we have a field with Integer type, we should not mock it
             }

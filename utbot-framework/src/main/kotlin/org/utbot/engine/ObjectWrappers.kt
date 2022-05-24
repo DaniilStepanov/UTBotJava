@@ -8,6 +8,7 @@ import org.utbot.engine.UtOptionalClass.UT_OPTIONAL
 import org.utbot.engine.UtOptionalClass.UT_OPTIONAL_DOUBLE
 import org.utbot.engine.UtOptionalClass.UT_OPTIONAL_INT
 import org.utbot.engine.UtOptionalClass.UT_OPTIONAL_LONG
+import org.utbot.engine.UtStreamClass.*
 import org.utbot.engine.overrides.collections.AssociativeArray
 import org.utbot.engine.overrides.collections.RangeModifiableUnlimitedArray
 import org.utbot.engine.overrides.collections.UtHashMap
@@ -81,6 +82,10 @@ val classToWrapper: MutableMap<TypeToBeWrapped, WrapperType> =
         putSootClass(java.util.AbstractMap::class, UtHashMap::class)
         putSootClass(java.util.LinkedHashMap::class, UtHashMap::class)
         putSootClass(java.util.HashMap::class, UtHashMap::class)
+
+        putSootClass(java.util.stream.BaseStream::class, UT_STREAM.className)
+        putSootClass(java.util.stream.Stream::class, UT_STREAM.className)
+        // TODO primitive streams https://github.com/UnitTestBot/UTBotJava/issues/146
     }
 
 /**
@@ -176,7 +181,12 @@ private val wrappers = mapOf(
     wrap(java.util.Map::class) { _, addr -> objectValue(LINKED_HASH_MAP_TYPE, addr, MapWrapper()) },
     wrap(java.util.AbstractMap::class) { _, addr -> objectValue(LINKED_HASH_MAP_TYPE, addr, MapWrapper()) },
     wrap(java.util.LinkedHashMap::class) { _, addr -> objectValue(LINKED_HASH_MAP_TYPE, addr, MapWrapper()) },
-    wrap(java.util.HashMap::class) { _, addr -> objectValue(HASH_MAP_TYPE, addr, MapWrapper()) }
+    wrap(java.util.HashMap::class) { _, addr -> objectValue(HASH_MAP_TYPE, addr, MapWrapper()) },
+
+    // stream wrappers
+    wrap(java.util.stream.BaseStream::class) { _, addr -> objectValue(STREAM_TYPE, addr, CommonStreamWrapper()) },
+    wrap(java.util.stream.Stream::class) { _, addr -> objectValue(STREAM_TYPE, addr, CommonStreamWrapper()) },
+    // TODO primitive streams https://github.com/UnitTestBot/UTBotJava/issues/146
 ).also {
     // check every `wrapped` class has a corresponding value in [classToWrapper]
     it.keys.all { key ->
@@ -187,7 +197,7 @@ private val wrappers = mapOf(
 private fun wrap(kClass: KClass<*>, implementation: (RefType, UtAddrExpression) -> ObjectValue) =
     kClass.id to implementation
 
-internal fun wrapper(type: RefType, addr: UtAddrExpression) =
+internal fun wrapper(type: RefType, addr: UtAddrExpression): ObjectValue? =
     wrappers[type.id]?.invoke(type, addr)
 
 interface WrapperInterface {

@@ -30,6 +30,8 @@ import org.utbot.engine.overrides.collections.UtOptional
 import org.utbot.engine.overrides.collections.UtOptionalDouble
 import org.utbot.engine.overrides.collections.UtOptionalInt
 import org.utbot.engine.overrides.collections.UtOptionalLong
+import org.utbot.engine.overrides.stream.Stream
+import org.utbot.engine.overrides.stream.UtStream
 import java.io.File
 import java.nio.file.Path
 import kotlin.reflect.KClass
@@ -127,5 +129,8 @@ private val classesToLoad = arrayOf(
     UtNativeStringWrapper::class,
     UtString::class,
     UtStringBuilder::class,
-    UtStringBuffer::class
+    UtStringBuffer::class,
+    Stream::class,
+    UtStream::class,
+    UtStream.UtStreamIterator::class
 )

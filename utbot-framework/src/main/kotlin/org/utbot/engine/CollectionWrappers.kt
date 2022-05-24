@@ -1,15 +1,19 @@
 package org.utbot.engine
 
+import kotlinx.collections.immutable.persistentSetOf
 import org.utbot.common.unreachableBranch
 import org.utbot.engine.overrides.collections.AssociativeArray
+import org.utbot.engine.overrides.collections.RangeModifiableUnlimitedArray
 import org.utbot.engine.overrides.collections.UtArrayList
 import org.utbot.engine.overrides.collections.UtGenericAssociative
 import org.utbot.engine.overrides.collections.UtGenericStorage
 import org.utbot.engine.overrides.collections.UtHashMap
 import org.utbot.engine.overrides.collections.UtHashSet
 import org.utbot.engine.overrides.collections.UtLinkedList
+import org.utbot.engine.overrides.stream.UtStream
 import org.utbot.engine.pc.UtAddrExpression
 import org.utbot.engine.pc.UtExpression
+import org.utbot.engine.pc.mkEq
 import org.utbot.engine.pc.select
 import org.utbot.engine.symbolic.asHardConstraint
 import org.utbot.engine.z3.intValue
@@ -33,7 +37,6 @@ import org.utbot.framework.plugin.api.util.id
 import org.utbot.framework.plugin.api.util.methodId
 import org.utbot.framework.plugin.api.util.objectClassId
 import org.utbot.framework.util.nextModelName
-import java.util.LinkedList
 import soot.IntType
 import soot.RefType
 import soot.Scene
@@ -50,7 +53,8 @@ abstract class BaseOverriddenWrapper(protected val overriddenClassName: String) 
      *
      * @see invoke
      */
-    protected abstract fun UtBotSymbolicEngine.overrideInvoke(
+    protected abstract fun overrideInvoke(
+        engine: UtBotSymbolicEngine,
         wrapper: ObjectValue,
         method: SootMethod,
         parameters: List<SymbolicValue>
@@ -74,8 +78,7 @@ abstract class BaseOverriddenWrapper(protected val overriddenClassName: String) 
         method: SootMethod,
         parameters: List<SymbolicValue>
     ): List<InvokeResult> {
-
-        val methodResults = overrideInvoke(wrapper, method, parameters)
+        val methodResults = overrideInvoke(this, wrapper, method, parameters)
         if (methodResults != null) {
             return methodResults
         }
@@ -94,25 +97,35 @@ abstract class BaseOverriddenWrapper(protected val overriddenClassName: String) 
 }
 
 /**
- * WrapperInterface that proxies an implementation with methods of [overriddenClass].
+ * Wrapper for a particular [java.util.Collection] or [java.util.Map] or [java.util.stream.Stream].
  */
-abstract class BaseCollectionWrapper(collectionClassName: String) : BaseOverriddenWrapper(collectionClassName) {
+abstract class BaseContainerWrapper(containerClassName: String) : BaseOverriddenWrapper(containerClassName) {
     /**
      * Resolve [wrapper] to [UtAssembleModel] using [resolver].
      */
     override fun value(resolver: Resolver, wrapper: ObjectValue): UtAssembleModel = resolver.run {
-        val classId = chooseClassIdWithConstructor(wrapper.type.sootClass.id)
         val addr = holder.concreteAddr(wrapper.addr)
         val modelName = nextModelName(baseModelName)
 
         val parameterModels = resolveValueModels(wrapper)
 
+        val classId = chooseClassIdWithConstructor(wrapper.type.sootClass.id)
+
         val instantiationChain = mutableListOf<UtStatementModel>()
         val modificationsChain = mutableListOf<UtStatementModel>()
-        return UtAssembleModel(addr, classId, modelName, instantiationChain, modificationsChain)
+
+        UtAssembleModel(addr, classId, modelName, instantiationChain, modificationsChain)
             .apply {
-                instantiationChain += UtExecutableCallModel(null, constructorId(classId), emptyList(), this)
-                modificationsChain += parameterModels.map { UtExecutableCallModel(this, modificationMethodId, it) }
+                instantiationChain += UtExecutableCallModel(
+                    instance = null,
+                    executable = constructorId(classId),
+                    params = emptyList(),
+                    returnValue = this
+                )
+
+                modificationsChain += parameterModels.map {
+                    UtExecutableCallModel(this, modificationMethodId, it)
+                }
             }
     }
 
@@ -138,6 +151,157 @@ abstract class BaseCollectionWrapper(collectionClassName: String) : BaseOverridd
     protected abstract val baseModelName: String
 
     override fun toString() = "$overriddenClassName()"
+}
+
+abstract class BaseGenericStorageBasedContainerWrapper(containerClassName: String) : BaseContainerWrapper(containerClassName) {
+    override fun overrideInvoke(
+        engine: UtBotSymbolicEngine,
+        wrapper: ObjectValue,
+        method: SootMethod,
+        parameters: List<SymbolicValue>
+    ): List<InvokeResult>? =
+        with(engine) {
+            when (method.signature) {
+                UT_GENERIC_STORAGE_SET_EQUAL_GENERIC_TYPE_SIGNATURE -> {
+                    val equalGenericTypeConstraint = typeRegistry
+                        .eqGenericSingleTypeParameterConstraint(parameters[0].addr, wrapper.addr)
+                        .asHardConstraint()
+
+                    val methodResult = MethodResult(
+                        SymbolicSuccess(voidValue),
+                        equalGenericTypeConstraint
+                    )
+
+                    listOf(methodResult)
+                }
+                else -> null
+            }
+        }
+
+    override fun Resolver.resolveValueModels(wrapper: ObjectValue): List<List<UtModel>> {
+        val elementDataFieldId = FieldId(overriddenClass.type.classId, "elementData")
+        val arrayModel = collectFieldModels(wrapper.addr, overriddenClass.type)[elementDataFieldId] as? UtArrayModel
+
+        return arrayModel?.let { constructValues(arrayModel, arrayModel.length) } ?: emptyList()
+    }
+}
+
+/**
+ * WrapperInterface that proxies an implementation of [java.util.Collection] with methods of [overriddenClass].
+ */
+abstract class BaseCollectionWrapper(
+    collectionClassName: String
+) : BaseGenericStorageBasedContainerWrapper(collectionClassName) {
+    private val utType = Scene.v().getSootClass(collectionClassName).type
+
+    private val elementDataField = SootField(
+        "elementData",
+        RangeModifiableUnlimitedArrayWrapper.rangeModifiableArrayType
+    )
+
+    private val wrapperElementDataFieldId = FieldId(overriddenClass.type.classId, "elementData")
+
+    override fun overrideInvoke(
+        engine: UtBotSymbolicEngine,
+        wrapper: ObjectValue,
+        method: SootMethod,
+        parameters: List<SymbolicValue>
+    ): List<InvokeResult>? =
+        with(engine) {
+            when (method.signature) {
+                UT_COLLECTION_STREAM_SIGNATURE -> {
+                    val collectionElementDataChunkId = hierarchy.chunkIdForField(utType, elementDataField)
+
+                    val wrapperStorageFieldArrayDescriptor = MemoryChunkDescriptor(
+                        collectionElementDataChunkId,
+                        wrapper.type,
+                        RangeModifiableUnlimitedArrayWrapper.rangeModifiableArrayType
+                    )
+
+                    val curElementDataValue = memory
+                        .findArray(wrapperStorageFieldArrayDescriptor)
+                        .select(wrapper.addr)
+
+                    val curElementDataAddr = UtAddrExpression(curElementDataValue)
+
+                    val streamAddr = findNewAddr()
+                    val streamValue = createObject(streamAddr, STREAM_TYPE, useConcreteType = true)
+
+                    val streamElementDataChunkId = hierarchy.chunkIdForField(utStreamType, elementDataField)
+                    val streamStorageFieldArrayDescriptor = MemoryChunkDescriptor(
+                        streamElementDataChunkId,
+                        utStreamType,
+                        RangeModifiableUnlimitedArrayWrapper.rangeModifiableArrayType
+                    )
+                    val streamElementDataValue = memory
+                        .findArray(streamStorageFieldArrayDescriptor)
+                        .select(streamAddr)
+
+                    val dataEqualityConstraint = mkEq(curElementDataValue, streamElementDataValue).asHardConstraint()
+
+                    val genericsEqualityConstraint =
+                        typeRegistry.eqGenericSingleTypeParameterConstraint(wrapper.addr, streamAddr).asHardConstraint()
+
+                    val collectionElementDataRead = InstanceFieldReadOperation(
+                        wrapper.addr,
+                        wrapperElementDataFieldId
+                    )
+
+                    val streamElementDataRead = InstanceFieldReadOperation(
+                        streamAddr,
+                        streamElementDataFieldId
+                    )
+
+                    val beginRead = InstanceFieldReadOperation(
+                        curElementDataAddr,
+                        arrayBeginFieldId
+                    )
+
+                    val endRead = InstanceFieldReadOperation(
+                        curElementDataAddr,
+                        arrayEndFieldId
+                    )
+
+                    val storageRead = InstanceFieldReadOperation(
+                        curElementDataAddr,
+                        arrayStorageFieldId
+                    )
+
+                    val touchedChunkDescriptors =
+                        persistentSetOf(wrapperStorageFieldArrayDescriptor, streamStorageFieldArrayDescriptor)
+                    val instanceFieldReads = persistentSetOf(
+                        collectionElementDataRead,
+                        streamElementDataRead,
+                        beginRead,
+                        endRead,
+                        storageRead
+                    )
+                    val wrapperTouchedDataUpdate = MemoryUpdate(
+                        touchedChunkDescriptors = touchedChunkDescriptors,
+                        instanceFieldReads = instanceFieldReads
+                    )
+
+                    val methodResult = MethodResult(
+                        symbolicResult = SymbolicSuccess(streamValue),
+                        hardConstraints = genericsEqualityConstraint + dataEqualityConstraint,
+                        memoryUpdates = wrapperTouchedDataUpdate
+                    )
+
+                    listOf(methodResult)
+                }
+                else -> super.overrideInvoke(engine, wrapper, method, parameters)
+            }
+        }
+
+    companion object {
+        private val streamElementDataFieldId = FieldId(UtStream::class.java.id, "elementData")
+        private val arrayBeginFieldId = FieldId(RangeModifiableUnlimitedArray::class.java.id, "begin")
+        private val arrayEndFieldId = FieldId(RangeModifiableUnlimitedArray::class.java.id, "end")
+        private val arrayStorageFieldId = FieldId(RangeModifiableUnlimitedArray::class.java.id, "storage")
+
+        private val utStreamType: RefType
+            get() = Scene.v().getSootClass(UtStream::class.java.canonicalName).type
+    }
 }
 
 /**
@@ -166,29 +330,6 @@ enum class UtListClass {
  * that are arranged to iterating order of list.
  */
 class ListWrapper(private val utListClass: UtListClass) : BaseCollectionWrapper(utListClass.className) {
-    override fun UtBotSymbolicEngine.overrideInvoke(
-        wrapper: ObjectValue,
-        method: SootMethod,
-        parameters: List<SymbolicValue>
-    ): List<InvokeResult>? =
-        if (method.signature == UT_GENERIC_STORAGE_SET_EQUAL_GENERIC_TYPE_SIGNATURE) {
-            listOf(
-                MethodResult(
-                    SymbolicSuccess(voidValue),
-                    typeRegistry.eqGenericSingleTypeParameterConstraint(parameters[0].addr, wrapper.addr).asHardConstraint()
-                )
-            )
-        } else {
-            null
-        }
-
-    override fun Resolver.resolveValueModels(wrapper: ObjectValue): List<List<UtModel>> {
-        val elementDataFieldId = FieldId(overriddenClass.type.classId, "elementData")
-        val arrayModel = collectFieldModels(wrapper.addr, overriddenClass.type)[elementDataFieldId] as? UtArrayModel
-
-        return arrayModel?.let { constructValues(arrayModel, arrayModel.length) } ?: emptyList()
-    }
-
     /**
      * Chooses proper class for instantiation. Uses [java.util.ArrayList] instead of [java.util.List]
      * or [java.util.AbstractList].
@@ -203,7 +344,7 @@ class ListWrapper(private val utListClass: UtListClass) : BaseCollectionWrapper(
         classId = java.util.List::class.id,
         name = "add",
         returnType = booleanClassId,
-        arguments = arrayOf(java.lang.Object::class.id),
+        arguments = arrayOf(objectClassId),
     )
 
     override val baseModelName = "list"
@@ -222,30 +363,6 @@ class ListWrapper(private val utListClass: UtListClass) : BaseCollectionWrapper(
  * entries, then real behavior of generated test can differ from expected and undefined.
  */
 class SetWrapper : BaseCollectionWrapper(UtHashSet::class.qualifiedName!!) {
-    override fun UtBotSymbolicEngine.overrideInvoke(
-        wrapper: ObjectValue,
-        method: SootMethod,
-        parameters: List<SymbolicValue>
-    ): List<InvokeResult>? =
-        if (method.signature == UT_GENERIC_STORAGE_SET_EQUAL_GENERIC_TYPE_SIGNATURE) {
-            listOf(
-                MethodResult(
-                    SymbolicSuccess(voidValue),
-                    typeRegistry.eqGenericSingleTypeParameterConstraint(parameters[0].addr, wrapper.addr)
-                        .asHardConstraint()
-                )
-            )
-        } else {
-            null
-        }
-
-    override fun Resolver.resolveValueModels(wrapper: ObjectValue): List<List<UtModel>> {
-        val elementDataFieldId = FieldId(overriddenClass.type.classId, "elementData")
-        val arrayModel = collectFieldModels(wrapper.addr, overriddenClass.type)[elementDataFieldId] as? UtArrayModel
-
-        return arrayModel?.let { constructValues(arrayModel, arrayModel.length) } ?: emptyList()
-    }
-
     /**
      * Chooses proper class for instantiation. Uses [java.util.ArrayList] instead of [java.util.List]
      * or [java.util.AbstractList].
@@ -260,7 +377,7 @@ class SetWrapper : BaseCollectionWrapper(UtHashSet::class.qualifiedName!!) {
             classId = java.util.Set::class.id,
             name = "add",
             returnType = booleanClassId,
-            arguments = arrayOf(java.lang.Object::class.id),
+            arguments = arrayOf(objectClassId),
         )
 
     override val baseModelName: String = "set"
@@ -278,33 +395,35 @@ class SetWrapper : BaseCollectionWrapper(UtHashSet::class.qualifiedName!!) {
  * through [java.util.HashMap] in program and generated test depends on the order of
  * entries, then real behavior of generated test can differ from expected and undefined.
  */
-class MapWrapper : BaseCollectionWrapper(UtHashMap::class.qualifiedName!!) {
-    override fun UtBotSymbolicEngine.overrideInvoke(
+class MapWrapper : BaseContainerWrapper(UtHashMap::class.qualifiedName!!) {
+    override fun overrideInvoke(
+        engine: UtBotSymbolicEngine,
         wrapper: ObjectValue,
         method: SootMethod,
         parameters: List<SymbolicValue>
-    ): List<InvokeResult>? {
-        return when (method.signature) {
-            UT_GENERIC_STORAGE_SET_EQUAL_GENERIC_TYPE_SIGNATURE -> listOf(
-                MethodResult(
-                    SymbolicSuccess(voidValue),
-                    typeRegistry.eqGenericSingleTypeParameterConstraint(parameters[0].addr, wrapper.addr).asHardConstraint()
+    ): List<InvokeResult>? =
+        with(engine) {
+            when (method.signature) {
+                UT_GENERIC_STORAGE_SET_EQUAL_GENERIC_TYPE_SIGNATURE -> listOf(
+                    MethodResult(
+                        SymbolicSuccess(voidValue),
+                        typeRegistry.eqGenericSingleTypeParameterConstraint(parameters[0].addr, wrapper.addr)
+                            .asHardConstraint()
+                    )
                 )
-            )
-            UT_GENERIC_ASSOCIATIVE_SET_EQUAL_GENERIC_TYPE_SIGNATURE -> listOf(
-                MethodResult(
-                    SymbolicSuccess(voidValue),
+                UT_GENERIC_ASSOCIATIVE_SET_EQUAL_GENERIC_TYPE_SIGNATURE -> listOf(
+                    MethodResult(
+                        SymbolicSuccess(voidValue),
                         typeRegistry.eqGenericTypeParametersConstraint(
                             parameters[0].addr,
                             wrapper.addr,
                             parameterSize = 2
                         ).asHardConstraint()
+                    )
                 )
-            )
-            else -> null
+                else -> null
+            }
         }
-    }
-
     override fun Resolver.resolveValueModels(wrapper: ObjectValue): List<List<UtModel>> {
         val fieldModels = collectFieldModels(wrapper.addr, overriddenClass.type)
         val keyModels = fieldModels[overriddenClass.getFieldByName("keys").fieldId] as? UtArrayModel
@@ -344,7 +463,7 @@ class MapWrapper : BaseCollectionWrapper(UtHashMap::class.qualifiedName!!) {
 /**
  * Constructs collection values using underlying array model. If model is null model, returns list of nulls.
  */
-private fun constructValues(model: UtModel, size: Int): List<List<UtModel>> = when (model) {
+internal fun constructValues(model: UtModel, size: Int): List<List<UtModel>> = when (model) {
     is UtArrayModel -> List(size) { listOf(model.stores[it] ?: model.constModel) }
     is UtNullModel -> {
         val elementClassId = model.classId.elementClassId
@@ -387,7 +506,7 @@ private fun constructKeysAndValues(keysModel: UtModel, valuesModel: UtModel, siz
 private val UT_GENERIC_STORAGE_CLASS
     get() = Scene.v().getSootClass(UtGenericStorage::class.java.canonicalName)
 
-private val UT_GENERIC_STORAGE_SET_EQUAL_GENERIC_TYPE_SIGNATURE =
+internal val UT_GENERIC_STORAGE_SET_EQUAL_GENERIC_TYPE_SIGNATURE =
     UT_GENERIC_STORAGE_CLASS.getMethodByName(UtGenericStorage<*>::setEqualGenericType.name).signature
 
 private val UT_GENERIC_ASSOCIATIVE_CLASS
@@ -396,10 +515,16 @@ private val UT_GENERIC_ASSOCIATIVE_CLASS
 private val UT_GENERIC_ASSOCIATIVE_SET_EQUAL_GENERIC_TYPE_SIGNATURE =
     UT_GENERIC_ASSOCIATIVE_CLASS.getMethodByName(UtGenericAssociative<*, *>::setEqualGenericType.name).signature
 
+private val COLLECTION_CLASS: SootClass
+    get() = Scene.v().getSootClass(java.util.Collection::class.java.canonicalName)
+
+private val UT_COLLECTION_STREAM_SIGNATURE: String =
+    COLLECTION_CLASS.getMethodByName("stream").signature
+
 val ARRAY_LIST_TYPE: RefType
-    get() = Scene.v().getSootClass(ArrayList::class.java.canonicalName).type
+    get() = Scene.v().getSootClass(java.util.ArrayList::class.java.canonicalName).type
 val LINKED_LIST_TYPE: RefType
-    get() = Scene.v().getSootClass(LinkedList::class.java.canonicalName).type
+    get() = Scene.v().getSootClass(java.util.LinkedList::class.java.canonicalName).type
 
 val LINKED_HASH_SET_TYPE: RefType
     get() = Scene.v().getSootClass(java.util.LinkedHashSet::class.java.canonicalName).type
@@ -410,6 +535,9 @@ val LINKED_HASH_MAP_TYPE: RefType
     get() = Scene.v().getSootClass(java.util.LinkedHashMap::class.java.canonicalName).type
 val HASH_MAP_TYPE: RefType
     get() = Scene.v().getSootClass(java.util.HashMap::class.java.canonicalName).type
+
+val STREAM_TYPE: RefType
+    get() = Scene.v().getSootClass(java.util.stream.Stream::class.java.canonicalName).type
 
 internal fun UtBotSymbolicEngine.getArrayField(
     addr: UtAddrExpression,

@@ -2563,7 +2563,7 @@ internal fun invokeMatcher(matcher: Function<Boolean>, params: List<Any?>) = whe
 fun ge(count: Int) = ExecutionsNumberMatcher("ge $count") { it >= count }
 fun eq(count: Int) = ExecutionsNumberMatcher("eq $count") { it == count }
 fun between(bounds: IntRange) = ExecutionsNumberMatcher("$bounds") { it in bounds }
-val ignoreExecutionsNumber = ExecutionsNumberMatcher("Do not calculate") { true }
+val ignoreExecutionsNumber = ExecutionsNumberMatcher("Do not calculate") { it > 0 }
 
 fun atLeast(percents: Int) = AtLeast(percents)
 
@@ -2701,7 +2701,7 @@ fun keyMatch(keyStmt: List<DocStatement>) = { summary: List<DocStatement>? ->
 fun Map<FieldId, UtConcreteValue<*>>.findByName(name: String) = entries.single { name == it.key.name }.value.value
 fun Map<FieldId, UtConcreteValue<*>>.singleValue() = values.single().value
 
-private typealias StaticsType = Map<FieldId, UtConcreteValue<*>>
+internal typealias StaticsType = Map<FieldId, UtConcreteValue<*>>
 private typealias Mocks = List<MockInfo>
 private typealias Instrumentation = List<UtInstrumentation>
 
