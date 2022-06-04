@@ -251,14 +251,21 @@ data class ExecutionState(
      */
     fun prettifiedPathLog(): String {
         val path = fullPath()
-        val prettifiedPath = path.joinToString(separator = "\n") { (stmt, depth, decision) ->
+        val prettifiedPath = prettifiedPath(path)
+        return " MD5(path)=${md5(prettifiedPath)}\n$prettifiedPath"
+    }
+
+    private fun md5(prettifiedPath: String) = prettifiedPath.md5()
+
+    fun md5() = prettifiedPath(fullPath()).md5()
+
+    private fun prettifiedPath(path: List<Step>) =
+        path.joinToString(separator = "\n") { (stmt, depth, decision) ->
             val prefix = when (decision) {
-                CALL_DECISION_NUM -> "call[${depth}] - " + "".padEnd(2*depth, ' ')
-                RETURN_DECISION_NUM -> " ret[${depth - 1}] - " + "".padEnd(2*depth, ' ')
-                else -> "          "+"".padEnd(2*depth, ' ')
+                CALL_DECISION_NUM -> "call[${depth}] - " + "".padEnd(2 * depth, ' ')
+                RETURN_DECISION_NUM -> " ret[${depth - 1}] - " + "".padEnd(2 * depth, ' ')
+                else -> "          " + "".padEnd(2 * depth, ' ')
             }
             "$prefix$stmt"
         }
-        return " MD5(path)=${prettifiedPath.md5()}\n$prettifiedPath"
-    }
 }
