@@ -286,6 +286,14 @@ object UtSettings {
      */
     var enableUnsatCoreCalculationForHardConstraints by getBooleanProperty(false)
 
+    /**
+     * Enable it to process states with unknown solver status
+     * from the queue to concrete execution.
+     *
+     * True by default.
+     */
+    var processUnknownStatesDuringConcreteExecution by getBooleanProperty(true)
+
     override fun toString(): String =
         properties
             .entries
