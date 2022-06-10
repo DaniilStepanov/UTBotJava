@@ -11,7 +11,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 @SuppressWarnings({"IfStatementWithIdenticalBranches", "RedundantOperationOnEmptyContainer"})
- public class BaseStreamExample {
+public class BaseStreamExample {
     Stream<Integer> returningStreamExample(List<Integer> list) {
         UtMock.assume(list != null);
 
@@ -23,7 +23,7 @@ import java.util.stream.Stream;
     }
 
     @SuppressWarnings("Convert2MethodRef")
-     boolean filterExample(List<Integer> list) {
+    boolean filterExample(List<Integer> list) {
         UtMock.assume(list != null && !list.isEmpty());
 
         int prevSize = list.size();
@@ -33,7 +33,7 @@ import java.util.stream.Stream;
         return prevSize != newSize;
     }
 
-     Integer[] mapExample(List<Integer> list) {
+    Integer[] mapExample(List<Integer> list) {
         UtMock.assume(list != null && !list.isEmpty());
 
         return list.stream().map(value -> value * 2).toArray(Integer[]::new);
@@ -43,7 +43,7 @@ import java.util.stream.Stream;
 
     // TODO flatMap
 
-     boolean distinctExample(List<Integer> list) {
+    boolean distinctExample(List<Integer> list) {
         UtMock.assume(list != null && !list.isEmpty());
 
         int prevSize = list.size();
@@ -53,7 +53,7 @@ import java.util.stream.Stream;
         return prevSize != newSize;
     }
 
-     Integer[] sortedExample(List<Integer> list) {
+    Integer[] sortedExample(List<Integer> list) {
         UtMock.assume(list != null && list.size() >= 2);
 
         Integer first = list.get(0);
@@ -71,7 +71,7 @@ import java.util.stream.Stream;
     static int x = 0;
 
     @SuppressWarnings("ResultOfMethodCallIgnored")
-     int peekExample(List<Integer> list) {
+    int peekExample(List<Integer> list) {
         UtMock.assume(list != null && !list.isEmpty());
 
         int beforeStaticValue = x;
@@ -82,7 +82,7 @@ import java.util.stream.Stream;
     }
 
     @SuppressWarnings("IfStatementWithIdenticalBranches")
-     Integer[] limitExample(List<Integer> list) {
+    Integer[] limitExample(List<Integer> list) {
         UtMock.assume(list != null && !list.isEmpty());
 
         if (list.size() <= 5) {
@@ -93,7 +93,7 @@ import java.util.stream.Stream;
     }
 
     @SuppressWarnings("IfStatementWithIdenticalBranches")
-     Integer[] skipExample(List<Integer> list) {
+    Integer[] skipExample(List<Integer> list) {
         UtMock.assume(list != null && !list.isEmpty());
 
         if (list.size() > 5) {
@@ -104,7 +104,7 @@ import java.util.stream.Stream;
     }
 
     @SuppressWarnings("SimplifyStreamApiCallChains")
-     int forEachExample(List<Integer> list) {
+    int forEachExample(List<Integer> list) {
         UtMock.assume(list != null && !list.isEmpty());
 
         int beforeStaticValue = x;
@@ -115,7 +115,7 @@ import java.util.stream.Stream;
     }
 
     @SuppressWarnings("SimplifyStreamApiCallChains")
-     Object[] toArrayExample(List<Integer> list) {
+    Object[] toArrayExample(List<Integer> list) {
         UtMock.assume(list != null);
 
         int size = list.size();
@@ -126,13 +126,13 @@ import java.util.stream.Stream;
         }
     }
 
-     Integer reduceExample(List<Integer> list) {
+    Integer reduceExample(List<Integer> list) {
         UtMock.assume(list != null);
 
         return list.stream().reduce(42, this::nullableSum);
     }
 
-     Optional<Integer> optionalReduceExample(List<Integer> list) {
+    Optional<Integer> optionalReduceExample(List<Integer> list) {
         UtMock.assume(list != null);
 
         int size = list.size();
@@ -148,27 +148,35 @@ import java.util.stream.Stream;
         return list.stream().reduce(this::nullableSum);
     }
 
-     Double complexReduceExample(List<Integer> list) {
+    Double complexReduceExample(List<Integer> list) {
         UtMock.assume(list != null);
 
-        return list.stream().reduce(42.0, (Double a, Integer b) -> a + b.doubleValue(), Double::sum);
+        if (list.isEmpty()) {
+            return list.stream().reduce(42.0, (Double a, Integer b) -> a + b.doubleValue(), Double::sum);
+        }
+
+        return list.stream().reduce(
+                42.0,
+                (Double a, Integer b) -> a + (b != null ? b.doubleValue() : 0.0),
+                Double::sum
+        );
     }
 
-     Integer collectExample(List<Integer> list) {
+    Integer collectExample(List<Integer> list) {
         UtMock.assume(list != null);
 
         return list.stream().collect(IntWrapper::new, IntWrapper::plus, IntWrapper::plus).value;
     }
 
     @SuppressWarnings("SimplifyStreamApiCallChains")
-     Set<Integer> collectorExample(List<Integer> list) {
+    Set<Integer> collectorExample(List<Integer> list) {
         UtMock.assume(list != null);
 
         return list.stream().collect(Collectors.toSet());
     }
 
     @SuppressWarnings("RedundantOperationOnEmptyContainer")
-     Optional<Integer> minExample(List<Integer> list) {
+    Optional<Integer> minExample(List<Integer> list) {
         UtMock.assume(list != null);
 
         int size = list.size();
@@ -185,7 +193,7 @@ import java.util.stream.Stream;
     }
 
     @SuppressWarnings("RedundantOperationOnEmptyContainer")
-     Optional<Integer> maxExample(List<Integer> list) {
+    Optional<Integer> maxExample(List<Integer> list) {
         UtMock.assume(list != null);
 
         int size = list.size();
@@ -202,7 +210,7 @@ import java.util.stream.Stream;
     }
 
     @SuppressWarnings({"ReplaceInefficientStreamCount", "ConstantConditions"})
-     long countExample(List<Integer> list) {
+    long countExample(List<Integer> list) {
         UtMock.assume(list != null);
 
         if (list.isEmpty()) {
@@ -213,7 +221,7 @@ import java.util.stream.Stream;
     }
 
     @SuppressWarnings({"Convert2MethodRef", "ConstantConditions", "RedundantOperationOnEmptyContainer"})
-     boolean anyMatchExample(List<Integer> list) {
+    boolean anyMatchExample(List<Integer> list) {
         UtMock.assume(list != null);
 
         if (list.isEmpty()) {
@@ -241,7 +249,7 @@ import java.util.stream.Stream;
     }
 
     @SuppressWarnings({"Convert2MethodRef", "ConstantConditions", "RedundantOperationOnEmptyContainer"})
-     boolean allMatchExample(List<Integer> list) {
+    boolean allMatchExample(List<Integer> list) {
         UtMock.assume(list != null);
 
         if (list.isEmpty()) {
@@ -269,7 +277,7 @@ import java.util.stream.Stream;
     }
 
     @SuppressWarnings({"Convert2MethodRef", "ConstantConditions", "RedundantOperationOnEmptyContainer"})
-     boolean noneMatchExample(List<Integer> list) {
+    boolean noneMatchExample(List<Integer> list) {
         UtMock.assume(list != null);
 
         if (list.isEmpty()) {
@@ -297,7 +305,7 @@ import java.util.stream.Stream;
     }
 
     @SuppressWarnings("RedundantOperationOnEmptyContainer")
-     Optional<Integer> findFirstExample(List<Integer> list) {
+    Optional<Integer> findFirstExample(List<Integer> list) {
         UtMock.assume(list != null);
 
         if (list.isEmpty()) {
@@ -311,7 +319,7 @@ import java.util.stream.Stream;
         }
     }
 
-     Integer iteratorSumExample(List<Integer> list) {
+    Integer iteratorSumExample(List<Integer> list) {
         UtMock.assume(list != null && !list.isEmpty());
 
         int sum = 0;

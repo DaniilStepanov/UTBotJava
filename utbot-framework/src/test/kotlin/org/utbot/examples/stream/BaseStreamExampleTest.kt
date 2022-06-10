@@ -162,7 +162,7 @@ class BaseStreamExampleTest : AbstractTestCaseGeneratorTest(
             BaseStreamExample::complexReduceExample,
             ignoreExecutionsNumber,
             { c, r -> c.isEmpty() && c.sumOf { it.toDouble() } + 42.0 == r },
-            { c, r -> c.isNotEmpty() && c.sumOf { it.toDouble() } + 42.0 == r },
+            { c: List<Int?>, r -> c.isNotEmpty() && c.sumOf { it?.toDouble() ?: 0.0 } + 42.0 == r },
             coverage = DoNotCalculate
         )
     }
