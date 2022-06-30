@@ -51,6 +51,7 @@ import mu.KotlinLogging
 import soot.Scene
 import soot.jimple.JimpleBody
 import soot.toolkits.graph.ExceptionalUnitGraph
+import kotlin.system.exitProcess
 
 object UtBotTestCaseGenerator : TestCaseGenerator {
 
@@ -200,6 +201,8 @@ object UtBotTestCaseGenerator : TestCaseGenerator {
     }
 
     private fun createDefaultFlow(engine: UtBotSymbolicEngine): Flow<UtResult> {
+        return flowOf(engine.fuzzing()).flattenConcat()
+        exitProcess(0)
         var flow = engine.traverse()
         if (UtSettings.useFuzzing) {
             flow = flowOf(flow, engine.fuzzing()).flattenConcat()

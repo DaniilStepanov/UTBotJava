@@ -30,6 +30,8 @@ dependencies {
     implementation group: 'io.github.microutils', name: 'kotlin-logging', version: kotlin_logging_version
     implementation group: 'org.jacoco', name: 'org.jacoco.report', version: jacoco_version
     implementation group: 'org.apache.commons', name: 'commons-text', version: apache_commons_text_version
+    //TODO probably replace to junit-quickcheck
+    implementation "edu.berkeley.cs.jqf:jqf-fuzz:2.0-SNAPSHOT"
     // we need this for construction mocks from composite models
     implementation group: 'org.mockito', name: 'mockito-core', version: '4.2.0'
     api project(':utbot-api')

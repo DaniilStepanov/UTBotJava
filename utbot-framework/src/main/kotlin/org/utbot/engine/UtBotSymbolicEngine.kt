@@ -98,6 +98,7 @@ import org.utbot.engine.util.statics.concrete.isEnumValuesFieldName
 import org.utbot.engine.util.statics.concrete.makeEnumNonStaticFieldsUpdates
 import org.utbot.engine.util.statics.concrete.makeEnumStaticFieldsUpdates
 import org.utbot.engine.util.statics.concrete.makeSymbolicValuesFromEnumConcreteValues
+import org.utbot.engine.zestfuzzer.ZestFuzzer
 import org.utbot.framework.PathSelectorType
 import org.utbot.framework.UtSettings
 import org.utbot.framework.UtSettings.checkSolverTimeoutMillis
@@ -241,6 +242,7 @@ import kotlin.math.min
 import kotlin.reflect.full.instanceParameter
 import kotlin.reflect.full.valueParameters
 import kotlin.reflect.jvm.javaType
+import kotlin.system.exitProcess
 
 private val logger = KotlinLogging.logger {}
 val pathLogger = KotlinLogging.logger(logger.name + ".path")
@@ -513,7 +515,8 @@ class UtBotSymbolicEngine(
 
 
     //Simple fuzzing
-    fun fuzzing(modelProvider: (ModelProvider) -> ModelProvider = { it }) = flow {
+    fun fuzzing(modelProvider: (ModelProvider) -> ModelProvider = { it }) = flow<UtResult> {
+        println("FUZZING STARTED")
         val executableId = if (methodUnderTest.isConstructor) {
             methodUnderTest.javaConstructor!!.executableId
         } else {
@@ -550,51 +553,53 @@ class UtBotSymbolicEngine(
         }
 
         val methodUnderTestDescription = FuzzedMethodDescription(executableId, collectConstantsForFuzzer(graph))
-        val modelProviderWithFallback = modelProvider(defaultModelProviders { nextDefaultModelId++ }).withFallback(fallbackModelProvider::toModel)
+        //val modelProviderWithFallback = modelProvider(defaultModelProviders { nextDefaultModelId++ }).withFallback(fallbackModelProvider::toModel)
         val coveredInstructionTracker = mutableSetOf<Instruction>()
         var attempts = UtSettings.fuzzingMaxAttemps
-        fuzz(methodUnderTestDescription, modelProviderWithFallback).forEachIndexed { index, parameters ->
-            val initialEnvironmentModels = EnvironmentModels(thisInstance, parameters, mapOf())
-
-            try {
-                val concreteExecutionResult =
-                    concreteExecutor.executeConcretely(methodUnderTest, initialEnvironmentModels, listOf())
-
-                workaround(REMOVE_ANONYMOUS_CLASSES) {
-                    concreteExecutionResult.result.onSuccess {
-                        if (it.classId.isAnonymous) {
-                            logger.debug("Anonymous class found as a concrete result, symbolic one will be returned")
-                            return@flow
-                        }
-                    }
-                }
-
-                if (!coveredInstructionTracker.addAll(concreteExecutionResult.coverage.coveredInstructions)) {
-                    if (--attempts < 0) {
-                        return@flow
-                    }
-                }
-
-                emit(
-                    UtExecution(
-                        stateBefore = initialEnvironmentModels,
-                        stateAfter = concreteExecutionResult.stateAfter,
-                        result = concreteExecutionResult.result,
-                        instrumentation = emptyList(),
-                        path = mutableListOf(),
-                        fullPath = emptyList(),
-                        coverage = concreteExecutionResult.coverage,
-                        testMethodName = if (methodUnderTest.isMethod) "test${methodUnderTest.callable.name.capitalize()}ByFuzzer${index}" else null
-                    )
-                )
-            } catch (e: CancellationException) {
-                logger.debug { "Cancelled by timeout" }
-            } catch (e: ConcreteExecutionFailureException) {
-                emitFailedConcreteExecutionResult(initialEnvironmentModels, e)
-            } catch (e: Throwable) {
-                emit(UtError("Default concrete execution failed", e))
-            }
-        }
+        ZestFuzzer(concreteExecutor, methodUnderTest, listOf(), thisInstance).fuzz()
+        return@flow
+//        fuzz(methodUnderTestDescription, modelProviderWithFallback).forEachIndexed { index, parameters ->
+//            val initialEnvironmentModels = EnvironmentModels(thisInstance, parameters, mapOf())
+//
+//            try {
+//                val concreteExecutionResult =
+//                    concreteExecutor.executeConcretely(methodUnderTest, initialEnvironmentModels, listOf())
+//
+//                workaround(REMOVE_ANONYMOUS_CLASSES) {
+//                    concreteExecutionResult.result.onSuccess {
+//                        if (it.classId.isAnonymous) {
+//                            logger.debug("Anonymous class found as a concrete result, symbolic one will be returned")
+//                            return@flow
+//                        }
+//                    }
+//                }
+//
+//                if (!coveredInstructionTracker.addAll(concreteExecutionResult.coverage.coveredInstructions)) {
+//                    if (--attempts < 0) {
+//                        return@flow
+//                    }
+//                }
+//
+//                emit(
+//                    UtExecution(
+//                        stateBefore = initialEnvironmentModels,
+//                        stateAfter = concreteExecutionResult.stateAfter,
+//                        result = concreteExecutionResult.result,
+//                        instrumentation = emptyList(),
+//                        path = mutableListOf(),
+//                        fullPath = emptyList(),
+//                        coverage = concreteExecutionResult.coverage,
+//                        testMethodName = if (methodUnderTest.isMethod) "test${methodUnderTest.callable.name.capitalize()}ByFuzzer${index}" else null
+//                    )
+//                )
+//            } catch (e: CancellationException) {
+//                logger.debug { "Cancelled by timeout" }
+//            } catch (e: ConcreteExecutionFailureException) {
+//                emitFailedConcreteExecutionResult(initialEnvironmentModels, e)
+//            } catch (e: Throwable) {
+//                emit(UtError("Default concrete execution failed", e))
+//            }
+//        }
     }
 
     private suspend fun FlowCollector<UtResult>.emitFailedConcreteExecutionResult(
@@ -3676,7 +3681,7 @@ private fun ResolvedModels.constructStateForMethod(methodUnderTest: UtMethod<*>)
     return EnvironmentModels(thisInstanceBefore, paramsBefore, statics)
 }
 
-private suspend fun ConcreteExecutor<UtConcreteExecutionResult, UtExecutionInstrumentation>.executeConcretely(
+suspend fun ConcreteExecutor<UtConcreteExecutionResult, UtExecutionInstrumentation>.executeConcretely(
     methodUnderTest: UtMethod<*>,
     stateBefore: EnvironmentModels,
     instrumentation: List<UtInstrumentation>

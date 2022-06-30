@@ -8,15 +8,40 @@ import org.utbot.examples.isException
 import org.utbot.framework.codegen.CodeGeneration
 import org.utbot.framework.plugin.api.CodegenLanguage
 import org.junit.jupiter.api.Test
+import org.utbot.examples.algorithms.BinarySearch
+import org.utbot.examples.algorithms.GraphAlgorithms
 
 internal class ExceptionExamplesTest : AbstractTestCaseGeneratorTest(
     testClass = ExceptionExamples::class,
     testCodeGeneration = true,
     languagePipelines = listOf(
         CodeGenerationLanguageLastStage(CodegenLanguage.JAVA),
-        CodeGenerationLanguageLastStage(CodegenLanguage.KOTLIN, CodeGeneration) // TODO: fails because we construct lists with generics
+        CodeGenerationLanguageLastStage(
+            CodegenLanguage.KOTLIN,
+            CodeGeneration
+        ) // TODO: fails because we construct lists with generics
     )
 ) {
+
+    @Test
+    fun fuzzBinarySearch() {
+        check(
+            BinarySearch::testFunc,
+            ignoreExecutionsNumber,
+            { longs, b -> true }
+        )
+    }
+
+    @Test
+    fun fuzzGraphBFS() {
+        check(
+            GraphAlgorithms::bfs,
+            ignoreExecutionsNumber,
+            { i, i2, b -> true }
+        )
+    }
+
+
     @Test
     fun testInitAnArray() {
         check(
@@ -85,11 +110,11 @@ internal class ExceptionExamplesTest : AbstractTestCaseGeneratorTest(
 
     @Test
     fun testCreateException() {
-            check(
-                ExceptionExamples::createException,
-                eq(1),
-                { r -> r is java.lang.IllegalArgumentException },
-            )
+        check(
+            ExceptionExamples::createException,
+            eq(1),
+            { r -> r is java.lang.IllegalArgumentException },
+        )
     }
 
     /**
