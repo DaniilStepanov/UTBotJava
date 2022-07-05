@@ -52,7 +52,7 @@ fun Field.getArrayValues(instance: Any): List<Any> {
 //
 //}
 
-private fun Class<*>.getAllSuperClassesAndInterfaces(): List<Class<*>> {
+fun Class<*>.getAllSuperClassesAndInterfaces(): List<Class<*>> {
     val res = mutableListOf<Class<*>>()
     var superClass = this.superclass
     res.add(superClass)
@@ -64,7 +64,7 @@ private fun Class<*>.getAllSuperClassesAndInterfaces(): List<Class<*>> {
     return res
 }
 
-fun Field.getFieldValue(instance: Any?): Any {
+fun Field.getFieldValue(instance: Any?): Any? {
     val oldAccessibleFlag = this.isAccessible
     this.isAccessible = true
     return when (this.type) {
@@ -83,6 +83,7 @@ fun Field.getFieldValue(instance: Any?): Any {
 fun Type.toClass(): Class<*> =
     when (this) {
         is ParameterizedTypeImpl -> this.rawType
+        is ru.vyarus.java.generics.resolver.context.container.ParameterizedTypeImpl -> this.rawType.toClass()
         else -> this as Class<*>
     }
 

@@ -6,19 +6,20 @@ import com.pholser.junit.quickcheck.generator.Generator
 import com.pholser.junit.quickcheck.internal.ParameterTypeContext
 import com.pholser.junit.quickcheck.random.SourceOfRandomness
 import org.javaruntype.type.Types
+import org.utbot.engine.isPublic
 import org.utbot.engine.zestfuzzer.util.*
 import ru.vyarus.java.generics.resolver.context.GenericsContext
 import ru.vyarus.java.generics.resolver.context.GenericsInfo
-import ru.vyarus.java.generics.resolver.util.GenericsResolutionUtils
 import sun.misc.Unsafe
 import sun.reflect.generics.reflectiveObjects.ParameterizedTypeImpl
 import java.lang.reflect.*
-import kotlin.system.exitProcess
+import kotlin.random.Random
 
 class UserClassesGenerator : ComponentizedGenerator<Any>(Any::class.java) {
 
     var clazz: Class<*>? = null
     var parameterType: Type? = null
+    var parameterTypeContext: ParameterTypeContext? = null
     var depth = 0
 
     companion object {
@@ -34,6 +35,7 @@ class UserClassesGenerator : ComponentizedGenerator<Any>(Any::class.java) {
             it.clazz = clazz
             it.parameterType = parameterType
             it.depth = depth
+            it.parameterTypeContext = parameterTypeContext
         }
     }
 
@@ -42,78 +44,135 @@ class UserClassesGenerator : ComponentizedGenerator<Any>(Any::class.java) {
     }
 
     override fun generate(random: SourceOfRandomness?, status: GenerationStatus?): Any? {
-        println("TRYING TO GENERATE ${parameterType!!.typeName}")
-        println("DEPTH = $depth")
+        //println("TRYING TO GENERATE $parameterType")
         val modifiers = parameterType!!.toClass().modifiers
         //TODO! generate instances of abstract classes and interfaces
         if (modifiers.and(Modifier.ABSTRACT) > 0 || modifiers.and(Modifier.INTERFACE) > 0) return null
         parameterType ?: return null
         clazz ?: return null
-        val resolvedGenerics = GenericsResolutionUtils.resolveGenerics(parameterType, mapOf())
-        val m = mapOf(clazz to resolvedGenerics)
+        val resolvedType = parameterTypeContext!!.getGenericContext().resolveType(parameterType)
+        val genericContext = parameterTypeContext?.getGenericContext()
+        val genericMap = parameterTypeContext?.getGenericContext()?.genericsMap() as LinkedHashMap
+//
+//        val resolvedGenerics = GenericsResolver.resolve(clazz).resolveGenericOf(parameterType)
+//        exitProcess(0)
+        //GenericsResolver.resolve(clazz).method(method)//GenericsResolutionUtils.resolveGenerics(parameterType, mapOf())
+        val m = mutableMapOf(clazz!! to genericMap)
         val genericsInfo = GenericsInfo(clazz, m)
         val gctx = GenericsContext(genericsInfo, clazz)
-        var setAllObjectsToNull = false
-        repeat(100) {
-            val instanceGeneratedInstanceViaLegalWay =
-                generateInstanceViaLegalWay(parameterType!!, gctx)
-            println("INSTANCE = $instanceGeneratedInstanceViaLegalWay")
-        }
-        return null
-        if (/*Random.getTrue(25)* ||*/ depth >= DataGeneratorSettings.maxDepthOfGeneration) {
-            //generateInstanceViaConstructorInvocation(clazz!!, gctx)?.let { return it }
-            setAllObjectsToNull = true
-        }
+        val inst =
+            if (Random.getTrue(50)) {
+                generateInstanceViaConstructor(resolvedType.toClass(), gctx, depth)
+                    ?: generateInstanceStatics(Types.forJavaLangReflectType(resolvedType), gctx, depth)
+            } else {
+                generateInstanceStatics(Types.forJavaLangReflectType(resolvedType), gctx, depth)
+                    ?: generateInstanceViaConstructor(resolvedType.toClass(), gctx, depth)
+            }
+        return inst
+//        repeat(100) {
+//            val instanceByConstructorInvocation = generateInstanceViaConstructor(resolvedType.componentClass, gctx)
+//            println("INSTANCE = $instanceByConstructorInvocation")
+//        }
+//        exitProcess(0)
+//        repeat(100) {
+//            val instanceGeneratedInstanceViaLegalWay =
+//                generateInstanceViaLegalWay(parameterType!!, gctx)
+//            println("INSTANCE = $instanceGeneratedInstanceViaLegalWay")
+//        }
+//        return null
+//        if (/*Random.getTrue(25)* ||*/ depth >= DataGeneratorSettings.maxDepthOfGeneration) {
+//            //generateInstanceViaConstructorInvocation(clazz!!, gctx)?.let { return it }
+//            setAllObjectsToNull = true
+//        }
 //        val i = generateInstanceViaConstructorInvocation(clazz!!, gctx)
 //        println("INTANCE = $i")
 //        exitProcess(0)
-        val fieldValues = clazz!!.getAllDeclaredFields().map { field ->
-            println("F = $field ${field.name}")
-            val fieldValue =
-                if (Modifier.STATIC.and(field.modifiers) > 0 && Modifier.FINAL.and(field.modifiers) > 0) {
-                    field.getFieldValue(null)
-                } else {
-                    generateFieldValue(field, gctx, setAllObjectsToNull)
-                }
-            field to fieldValue
-        }
-        println("TRYING TO ALLOCATE INSTANCE OF $clazz")
-        val instance = UNSAFE.allocateInstance(clazz)
-        fieldValues.forEach { (field, value) ->
-            field.generateInstance(instance, value)
-        }
-        return instance
+//        val fieldValues = clazz!!.getAllDeclaredFields().map { field ->
+//            println("F = $field ${field.name}")
+//            val fieldValue =
+//                if (Modifier.STATIC.and(field.modifiers) > 0 && Modifier.FINAL.and(field.modifiers) > 0) {
+//                    field.getFieldValue(null)
+//                } else {
+//                    generateFieldValue(field, gctx, setAllObjectsToNull)
+//                }
+//            field to fieldValue
+//        }
+//        println("TRYING TO ALLOCATE INSTANCE OF $clazz")
+//        val instance = UNSAFE.allocateInstance(clazz)
+//        fieldValues.forEach { (field, value) ->
+//            field.generateInstance(instance, value)
+//        }
+//        return instance
     }
 
-    private fun generateInstanceViaLegalWay(type: Type, gctx: GenericsContext): Any? {
-        val allStaticFields = ""
+    private fun generateInstanceStatics(
+        resolvedType: org.javaruntype.type.Type<*>,
+        gctx: GenericsContext,
+        depth: Int
+    ): Any? {
+        //println("VIA STATIC FIELD")
+        if (depth > DataGeneratorSettings.maxDepthOfGeneration) return null
+        //TODO make it work for subtypes
         val resolvedStaticMethods =
-            type.toClass().declaredMethods.filter { it.hasModifiers(Modifier.STATIC) }
+            resolvedType.componentClass.declaredMethods.filter { it.hasModifiers(Modifier.STATIC, Modifier.PUBLIC) }
                 .map { it to gctx.method(it).resolveReturnType() }
-                .filter { it.second == type }
+                .filter { Types.forJavaLangReflectType(it.second).canBeReplacedBy(resolvedType) }
         val resolvedStaticFields =
-            type.toClass().declaredFields.filter { it.hasModifiers(Modifier.STATIC) }
+            resolvedType.componentClass.declaredFields.filter { it.hasModifiers(Modifier.STATIC, Modifier.PUBLIC) }
                 .map { it to gctx.resolveFieldType(it) }
-                .filter { it.second == type }
-        println()
-        exitProcess(0)
-        return null
+                .filter { Types.forJavaLangReflectType(it.second).canBeReplacedBy(resolvedType) }
+        //println("FIELD = $resolvedStaticFields")
+        val (fieldOrMethodToProvideInstance, typeToGenerate) =
+            if (Random.nextBoolean()) {
+                resolvedStaticFields.randomOrNull() ?: resolvedStaticMethods.randomOrNull()
+            } else {
+                resolvedStaticMethods.randomOrNull() ?: resolvedStaticFields.randomOrNull()
+            } ?: return null
+        val fieldValue = when (fieldOrMethodToProvideInstance) {
+            is Field -> fieldOrMethodToProvideInstance.getFieldValue(null)
+            is Method -> {
+                val parameterValues = fieldOrMethodToProvideInstance.parameters.map { parameter ->
+                    val parameterValue =
+                        generateParameterValue(parameter, resolvedType.componentClass.name, gctx, false)
+                    parameterValue
+                }
+                fieldOrMethodToProvideInstance.isAccessible = true
+                try {
+                    fieldOrMethodToProvideInstance.invoke(null, *parameterValues.toTypedArray())
+                } catch (e: InvocationTargetException) {
+                    return null
+                }
+            }
+            else -> return null
+        }
+        return fieldValue
     }
 
-    private fun generateInstanceViaConstructor(clazz: Class<*>, gctx: GenericsContext): Any? {
-        val constructor = clazz.declaredConstructors.randomOrNull() ?: return null
+    private fun generateInstanceViaConstructor(clazz: Class<*>, gctx: GenericsContext, depth: Int): Any? {
+        //println("VIA CONSTRUCTOR INVOCATION")
+        val randomPublicConstructor = clazz.declaredConstructors.filter { it.isPublic }.randomOrNull()
+        val randomConstructor = clazz.declaredConstructors.randomOrNull()
+        val constructor = if (Random.getTrue(75)) randomPublicConstructor ?: randomConstructor else randomConstructor
+        constructor ?: return null
+        //println("CONSTRUCTOR = $constructor")
         val oldAccessibleFlag = constructor.isAccessible
         constructor.isAccessible = true
+        val setAllObjectsToNull = depth >= DataGeneratorSettings.maxDepthOfGeneration
         val parameterValues =
             constructor.parameters.map { parameter ->
                 val parameterType = gctx.resolveType(parameter.parameterizedType)
-                val parameterValue = generateParameterValue(parameter, clazz.name, gctx, false)
-                //println("VALUE OF PARAM $parameterType is $parameterValue")
+                val parameterValue = generateParameterValue(parameter, clazz.name, gctx, setAllObjectsToNull)
+                //println("DEPTH = $depth VALUE OF PARAM $parameterType is $parameterValue")
                 parameterValue
             }
-
-        return constructor.newInstance(*parameterValues.toTypedArray())
-            .also { constructor.isAccessible = oldAccessibleFlag }
+        return try {
+            constructor.newInstance(*parameterValues.toTypedArray())
+                .also { constructor.isAccessible = oldAccessibleFlag }
+        } catch (e: java.lang.IllegalArgumentException) {
+            null
+        } catch (e: InvocationTargetException) {
+            null
+        }
     }
 
     private fun generateParameterValue(

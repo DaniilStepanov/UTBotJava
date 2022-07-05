@@ -5,20 +5,32 @@ import com.pholser.junit.quickcheck.internal.ParameterTypeContext
 import com.pholser.junit.quickcheck.internal.generator.GeneratorRepository
 import org.utbot.engine.zestfuzzer.util.getAllDeclaredFields
 import org.utbot.engine.zestfuzzer.util.isFinal
+import ru.vyarus.java.generics.resolver.context.GenericsContext
 import sun.reflect.generics.reflectiveObjects.ParameterizedTypeImpl
 import java.lang.reflect.Field
 import java.lang.reflect.Parameter
 import java.lang.reflect.Type
+import java.util.Locale
 import kotlin.system.exitProcess
 
 val Generator<*>.isUserGenerator: Boolean
     get() = this is UserClassesGenerator
 
-fun GeneratorRepository.addGenerator(forClass: Class<*>, parameterType: Type, depth: Int) {
+fun GeneratorRepository.addGenerator(
+    forClass: Class<*>,
+    parameterType: Type,
+    parameterTypeContext: ParameterTypeContext,
+    depth: Int
+) {
     val generatorsField = this.javaClass.getAllDeclaredFields().find { it.name == "generators" }!!
     generatorsField.isAccessible = true
     val map = generatorsField.get(this) as java.util.HashMap<Class<*>, Set<Generator<*>>>
-    map[forClass] = setOf(UserClassesGenerator().also { it.clazz = forClass; it.parameterType = parameterType; it.depth = depth })
+    map[forClass] = setOf(UserClassesGenerator().also {
+        it.clazz = forClass;
+        it.parameterType = parameterType;
+        it.parameterTypeContext = parameterTypeContext;
+        it.depth = depth
+    })
 }
 
 
@@ -28,7 +40,10 @@ fun GeneratorRepository.getOrProduceGenerator(field: Field, depth: Int = 0): Gen
 fun GeneratorRepository.getOrProduceGenerator(param: Parameter, depth: Int = 0): Generator<*> =
     getOrProduceGenerator(ParameterTypeContext.forParameter(param), depth)
 
-fun GeneratorRepository.getOrProduceGenerator(parameterTypeContext: ParameterTypeContext, depth: Int = 0): Generator<*> {
+fun GeneratorRepository.getOrProduceGenerator(
+    parameterTypeContext: ParameterTypeContext,
+    depth: Int = 0
+): Generator<*> {
     val allTypeParameters = parameterTypeContext.getAllTypeParameters()
     var generator: Generator<*>
     while (true) {
@@ -42,11 +57,38 @@ fun GeneratorRepository.getOrProduceGenerator(parameterTypeContext: ParameterTyp
             //ADD GENERATOR
             val className = e.localizedMessage.substringAfterLast("of type ")
             val classWithMissingGenerator = Class.forName(className.substringBefore('<'))
-            val typeWithActualTypeParams = allTypeParameters.find { it.typeName == className } ?: parameterTypeContext.type()
-            this.addGenerator(classWithMissingGenerator, typeWithActualTypeParams, depth)
+            val typeWithActualTypeParams =
+                allTypeParameters.find { it.typeName == className } ?: parameterTypeContext.type()
+            this.addGenerator(
+                classWithMissingGenerator,
+                typeWithActualTypeParams,
+                parameterTypeContext,
+                depth
+            )
         }
     }
     return generator
+}
+
+fun org.javaruntype.type.Type<*>.canBeReplacedBy(other: org.javaruntype.type.Type<*>): Boolean {
+    if (this.componentClass != other.componentClass) return false
+    return this.typeParameters.zip(other.typeParameters).all { it.second.type.isAssignableFrom(it.first.type) }
+}
+
+fun ParameterTypeContext.getGenericContext(): GenericsContext {
+    val generics = this.javaClass.getAllDeclaredFields().find { it.name == "generics" }!!
+    return generics.let {
+        it.isAccessible = true
+        it.get(this) as GenericsContext
+    }.also { generics.isAccessible = false }
+}
+
+fun ParameterTypeContext.getResolvedType(): org.javaruntype.type.Type<*> {
+    val generics = this.javaClass.getAllDeclaredFields().find { it.name == "resolved" }!!
+    return generics.let {
+        it.isAccessible = true
+        it.get(this) as org.javaruntype.type.Type<*>
+    }.also { generics.isAccessible = false }
 }
 
 private fun ParameterTypeContext.getAllTypeParameters(): List<Type> {
@@ -62,6 +104,19 @@ private fun ParameterTypeContext.getAllTypeParameters(): List<Type> {
     return res
 }
 
+private fun org.javaruntype.type.Type<*>.getAllTypeParameters(): List<org.javaruntype.type.Type<*>> {
+    val res = mutableListOf<org.javaruntype.type.Type<*>>()
+    val queue = ArrayDeque<org.javaruntype.type.Type<*>>()
+    this.typeParameters.forEach { queue.add(it.type) }
+    while (queue.isNotEmpty()) {
+        val el = queue.removeFirst()
+        res.add(el)
+        el.typeParameters.forEach { queue.add(it.type) }
+    }
+    return res
+}
+
+//org.javaruntype.type.Type<*>
 
 //fun GeneratorRepository.getOrProduceGenerator(parameter: Parameter): Generator<out Any> =
 //    try {

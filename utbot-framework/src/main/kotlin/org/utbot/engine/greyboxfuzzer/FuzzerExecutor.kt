@@ -1,6 +1,7 @@
 package org.utbot.engine.zestfuzzer
 
 import org.utbot.common.FileUtil
+import org.utbot.example.CalendarLogic
 import org.utbot.example.Graph
 import org.utbot.example.GraphAlgorithms
 import org.utbot.example.PrimitiveFields
@@ -138,5 +139,5 @@ fun fields(
 }
 
 fun main() {
-    FuzzerExecutor().testFuzzingSimple(GraphAlgorithms::class.java, "testFunc3")
+    FuzzerExecutor().testFuzzingSimple(CalendarLogic::class.java, "compare")
 }

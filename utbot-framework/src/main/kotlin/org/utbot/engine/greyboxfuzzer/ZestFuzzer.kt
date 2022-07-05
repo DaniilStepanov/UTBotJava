@@ -7,12 +7,15 @@ import com.pholser.junit.quickcheck.internal.generator.ServiceLoaderGeneratorSou
 import com.pholser.junit.quickcheck.random.SourceOfRandomness
 import edu.berkeley.cs.jqf.fuzz.ei.ZestGuidance
 import edu.berkeley.cs.jqf.fuzz.junit.quickcheck.NonTrackingGenerationStatus
+import org.utbot.engine.executeConcretely
 import org.utbot.engine.zestfuzzer.generator.*
 import org.utbot.engine.zestfuzzer.mutator.ObjectMerger
 import org.utbot.engine.zestfuzzer.util.getAllDeclaredFields
 import org.utbot.example.Graph
+import org.utbot.external.api.UtModelFactory
 import org.utbot.framework.concrete.UtConcreteExecutionResult
 import org.utbot.framework.concrete.UtExecutionInstrumentation
+import org.utbot.framework.concrete.UtModelConstructor
 import org.utbot.framework.plugin.api.*
 import org.utbot.instrumentation.ConcreteExecutor
 import java.io.ByteArrayInputStream
@@ -51,11 +54,36 @@ class ZestFuzzer(
     suspend fun fuzz(): Sequence<List<UtModel>> {
         val kfunction = methodUnderTest.callable as KFunction<*>
         val method = kfunction.javaMethod!!
-        val param: Parameter = method.parameters.first()
-        val generatorRepository = DataGeneratorSettings.generatorRepository
-        val generator = DataGenerator(generatorRepository)
-        val instance1 = generator.generate(param, DataGeneratorSettings.sourceOfRandomness, DataGeneratorSettings.genStatus)
-        println("INST = $instance1")
+        var maxCoverage = 0
+        repeat(1000) {
+            println("EXECUTION NUMBER $it")
+            val generatedParameters = method.parameters.map { parameter ->
+                DataGenerator.generate(
+                    parameter,
+                    DataGeneratorSettings.sourceOfRandomness,
+                    DataGeneratorSettings.genStatus
+                )
+            }
+            val generatedParameterAsUtModel = generatedParameters.map { UtPrimitiveModel(it.value) }
+            val initialEnvironmentModels = EnvironmentModels(thisInstance, generatedParameterAsUtModel, mapOf())
+            val executionResult =
+                concreteExecutor.executeConcretely(methodUnderTest, initialEnvironmentModels, listOf())
+            println("EXEC RES = ${executionResult.result}")
+            println("COVERAGE = ${executionResult.coverage.coveredInstructions.size}")
+            if (executionResult.coverage.coveredInstructions.size > maxCoverage) {
+                maxCoverage = executionResult.coverage.coveredInstructions.size
+            }
+            println("--------------------------------")
+        }
+        println("MAX COVERAGE = $maxCoverage")
+//        val param: Parameter = method.parameters.first()
+//        val generatorRepository = DataGeneratorSettings.generatorRepository
+//        val generator = DataGenerator(generatorRepository)
+//        repeat(100) {
+//            val instance1 =
+//                generator.generate(param, DataGeneratorSettings.sourceOfRandomness, DataGeneratorSettings.genStatus)
+//            println("INST = $instance1")
+//        }
 //        val instance2 = generator.generate(param, DataGeneratorSettings.sourceOfRandomness, genStatus)
 //        ObjectMerger().mergeObjects(instance1, instance2)
 //        println()
@@ -83,9 +111,9 @@ class ZestFuzzer(
 //        exitProcess(0)
 
 
-        val paramValue =
-            DataGenerator(generatorRepository).generate(param, DataGeneratorSettings.sourceOfRandomness, DataGeneratorSettings.genStatus)
-        println("PARAM VALUE = $paramValue")
+//        val paramValue =
+//            DataGenerator(generatorRepository).generate(param, DataGeneratorSettings.sourceOfRandomness, DataGeneratorSettings.genStatus)
+//        println("PARAM VALUE = $paramValue")
         //val parameter = UniversalGenerator(method.parameters.first().type).generate()
         //println("P = $parameter")
 
