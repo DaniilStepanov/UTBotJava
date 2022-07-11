@@ -1,4 +1,4 @@
-package org.utbot.engine.zestfuzzer.util
+package org.utbot.engine.greyboxfuzzer.util
 
 import org.utbot.framework.codegen.model.constructor.tree.isStatic
 import sun.reflect.generics.reflectiveObjects.ParameterizedTypeImpl
@@ -133,3 +133,13 @@ var Field.isFinal: Boolean
 
 fun Method.hasModifiers(vararg modifiers: Int) = modifiers.all { it.and(this.modifiers) > 0 }
 fun Field.hasModifiers(vararg modifiers: Int) = modifiers.all { it.and(this.modifiers) > 0 }
+fun Class<*>.hasModifiers(vararg modifiers: Int) = modifiers.all { it.and(this.modifiers) > 0 }
+fun Class<*>.hasAtLeastOneOfModifiers(vararg modifiers: Int) = modifiers.any { it.and(this.modifiers) > 0 }
+
+fun ru.vyarus.java.generics.resolver.context.container.ParameterizedTypeImpl.getActualArguments(): Array<Type> {
+    val args = this.javaClass.getAllDeclaredFields().find { it.name == "actualArguments" } ?: return arrayOf()
+    return args.let {
+        it.isAccessible = true
+        it.get(this) as Array<Type>
+    }.also { args.isAccessible = false }
+}

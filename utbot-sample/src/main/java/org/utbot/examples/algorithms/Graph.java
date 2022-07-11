@@ -1,5 +1,7 @@
 package org.utbot.examples.algorithms;
 
+import java.util.Arrays;
+
 public class Graph {
     private int size;
     private int[][] adj;
@@ -18,6 +20,13 @@ public class Graph {
 
     public void setAdj(int[][] adj) {
         this.adj = adj;
+    }
+
+    public int[] getChildrenOf(int node) {
+        if (node < 0 && node >= size) {
+            throw new IllegalArgumentException("Number of node out of bounds");
+        }
+        return Arrays.stream(adj[node]).filter(i -> i != 0).toArray();
     }
 
     private boolean isCyclic(int i, boolean[] visited, boolean[] recStack) {

@@ -1,21 +1,19 @@
-package org.utbot.engine.zestfuzzer
+package org.utbot.engine.greyboxfuzzer
 
+import org.jgrapht.graph.SimpleDirectedGraph
 import org.utbot.common.FileUtil
 import org.utbot.example.CalendarLogic
-import org.utbot.example.Graph
 import org.utbot.example.GraphAlgorithms
 import org.utbot.example.PrimitiveFields
+import org.utbot.example.jgrapht.CyclesTest
 import org.utbot.external.api.TestMethodInfo
 import org.utbot.external.api.UtBotJavaApi.fuzzingTestCases
-import org.utbot.external.api.UtBotJavaApi.generate
 import org.utbot.external.api.UtBotJavaApi.stopConcreteExecutorOnExit
 import org.utbot.external.api.UtModelFactory
 import org.utbot.external.api.classIdForType
 import org.utbot.framework.plugin.api.*
 import org.utbot.framework.plugin.api.util.UtContext
 import org.utbot.framework.plugin.api.util.UtContext.Companion.setUtContext
-import org.utbot.framework.util.Snippet
-import org.utbot.framework.util.compileClassFile
 import java.io.File
 import java.lang.reflect.Method
 import java.net.URL
@@ -35,7 +33,7 @@ class FuzzerExecutor {
         modelFactory = UtModelFactory()
     }
 
-    fun testFuzzingSimple(clazz: Class<*>, funName: String) {
+    fun testSimpleFuzzing(clazz: Class<*>, funName: String) {
         stopConcreteExecutorOnExit = false
         val classpath: String = getClassPath(clazz)
         val dependencyClassPath: String = getDependencyClassPath()
@@ -114,7 +112,7 @@ object SootUtils {
         val buildDirPath = buildDir.toPath()
 
         if (buildDirPath != previousBuildDir) {
-            org.utbot.framework.plugin.api.runSoot(buildDirPath, null)
+            runSoot(buildDirPath, null)
             previousBuildDir = buildDirPath
         }
     }
@@ -139,5 +137,5 @@ fun fields(
 }
 
 fun main() {
-    FuzzerExecutor().testFuzzingSimple(CalendarLogic::class.java, "compare")
+    FuzzerExecutor().testSimpleFuzzing(GraphAlgorithms::class.java, "testFunc3")
 }

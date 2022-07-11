@@ -1,7 +1,6 @@
-package org.utbot.engine.zestfuzzer.mutator
+package org.utbot.engine.greyboxfuzzer.mutator
 
-import org.utbot.engine.zestfuzzer.generator.FField
-import org.utbot.engine.zestfuzzer.generator.FParameter
+import org.utbot.engine.greyboxfuzzer.generator.FParameter
 
 class ObjectMerger {
 

@@ -4,6 +4,27 @@ import org.utbot.examples.structures.Pair;
 import java.util.Arrays;
 
 public class GraphExample {
+
+    public boolean runBFS() {
+        Graph graph = new Graph();
+
+        int size = 10;
+        graph.setSize(10);
+        graph.setAdj(new int[size][size]);
+
+        for (int i = 0; i < size; i++) {
+            Arrays.fill(graph.getAdj()[i], 0);
+        }
+
+        graph.addEdge(0, 1);
+        graph.addEdge(0, 2);
+        graph.addEdge(1, 2);
+        graph.addEdge(2, 0);
+        graph.addEdge(2, 3);
+        graph.addEdge(3, 3);
+
+        return GraphAlgorithms.bfs(graph, 0, 3);
+    }
     public boolean runFindCycle(Pair[] additionalEdges) {
         Graph graph = new Graph();
 

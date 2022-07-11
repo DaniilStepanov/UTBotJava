@@ -1,4 +1,4 @@
-package org.utbot.engine.zestfuzzer.coverage
+package org.utbot.engine.greyboxfuzzer.coverage
 
 import org.utbot.framework.plugin.api.Instruction
 

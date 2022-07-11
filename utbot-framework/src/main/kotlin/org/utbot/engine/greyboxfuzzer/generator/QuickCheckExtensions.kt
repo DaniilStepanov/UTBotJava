@@ -1,17 +1,19 @@
-package org.utbot.engine.zestfuzzer.generator
+package org.utbot.engine.greyboxfuzzer.generator
 
 import com.pholser.junit.quickcheck.generator.Generator
 import com.pholser.junit.quickcheck.internal.ParameterTypeContext
 import com.pholser.junit.quickcheck.internal.generator.GeneratorRepository
-import org.utbot.engine.zestfuzzer.util.getAllDeclaredFields
-import org.utbot.engine.zestfuzzer.util.isFinal
+import com.pholser.junit.quickcheck.internal.generator.LambdaGenerator
+import org.utbot.engine.greyboxfuzzer.util.getAllDeclaredFields
+import org.utbot.engine.greyboxfuzzer.util.hasAtLeastOneOfModifiers
+import org.utbot.engine.greyboxfuzzer.util.hasModifiers
+import org.utbot.engine.greyboxfuzzer.util.toClass
 import ru.vyarus.java.generics.resolver.context.GenericsContext
 import sun.reflect.generics.reflectiveObjects.ParameterizedTypeImpl
 import java.lang.reflect.Field
+import java.lang.reflect.Modifier
 import java.lang.reflect.Parameter
 import java.lang.reflect.Type
-import java.util.Locale
-import kotlin.system.exitProcess
 
 val Generator<*>.isUserGenerator: Boolean
     get() = this is UserClassesGenerator
@@ -26,9 +28,9 @@ fun GeneratorRepository.addGenerator(
     generatorsField.isAccessible = true
     val map = generatorsField.get(this) as java.util.HashMap<Class<*>, Set<Generator<*>>>
     map[forClass] = setOf(UserClassesGenerator().also {
-        it.clazz = forClass;
-        it.parameterType = parameterType;
-        it.parameterTypeContext = parameterTypeContext;
+        it.clazz = forClass
+        it.parameterType = parameterType
+        it.parameterTypeContext = parameterTypeContext
         it.depth = depth
     })
 }
@@ -45,12 +47,16 @@ fun GeneratorRepository.getOrProduceGenerator(
     depth: Int = 0
 ): Generator<*> {
     val allTypeParameters = parameterTypeContext.getAllTypeParameters()
+    val clazz = parameterTypeContext.type().toClass()
     var generator: Generator<*>
     while (true) {
         try {
+            println("TRYING TO GET GENERATOR FOR ${parameterTypeContext.type()}")
             generator = this.produceGenerator(parameterTypeContext)
             if (generator is UserClassesGenerator) {
                 generator.depth = depth
+            } else if (generator is LambdaGenerator<*, *> && clazz.hasAtLeastOneOfModifiers(Modifier.INTERFACE, Modifier.ABSTRACT)) {
+                throw IllegalStateException("")
             }
             break
         } catch (e: java.lang.IllegalArgumentException) {
@@ -65,6 +71,16 @@ fun GeneratorRepository.getOrProduceGenerator(
                 parameterTypeContext,
                 depth
             )
+        } catch (e: java.lang.IllegalStateException) {
+            val classWithMissingGenerator = parameterTypeContext.type().toClass()
+            val typeWithActualTypeParams =
+                allTypeParameters.find { it.typeName == classWithMissingGenerator.name } ?: parameterTypeContext.type()
+            this.addGenerator(
+                classWithMissingGenerator,
+                typeWithActualTypeParams,
+                parameterTypeContext,
+                depth
+            )
         }
     }
     return generator
@@ -72,7 +88,7 @@ fun GeneratorRepository.getOrProduceGenerator(
 
 fun org.javaruntype.type.Type<*>.canBeReplacedBy(other: org.javaruntype.type.Type<*>): Boolean {
     if (this.componentClass != other.componentClass) return false
-    return this.typeParameters.zip(other.typeParameters).all { it.second.type.isAssignableFrom(it.first.type) }
+    return this.typeParameters.zip(other.typeParameters).all { it.first.type.isAssignableFrom(it.second.type) }
 }
 
 fun ParameterTypeContext.getGenericContext(): GenericsContext {

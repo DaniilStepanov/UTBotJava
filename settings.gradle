@@ -16,4 +16,7 @@ include 'utbot-instrumentation-tests'
 include 'utbot-summary'
 include 'utbot-gradle'
 include 'utbot-maven'
+include 'utbot-fuzzers:jqf'
+findProject(':utbot-fuzzers:jqf')?.name = 'jqf'
+include 'utbot-fuzzers-jqf'
 

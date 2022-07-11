@@ -1,4 +1,4 @@
-package org.utbot.engine.zestfuzzer.generator
+package org.utbot.engine.greyboxfuzzer.generator
 
 import com.pholser.junit.quickcheck.internal.generator.GeneratorRepository
 import com.pholser.junit.quickcheck.internal.generator.ServiceLoaderGeneratorSource

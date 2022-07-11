@@ -98,7 +98,7 @@ import org.utbot.engine.util.statics.concrete.isEnumValuesFieldName
 import org.utbot.engine.util.statics.concrete.makeEnumNonStaticFieldsUpdates
 import org.utbot.engine.util.statics.concrete.makeEnumStaticFieldsUpdates
 import org.utbot.engine.util.statics.concrete.makeSymbolicValuesFromEnumConcreteValues
-import org.utbot.engine.zestfuzzer.ZestFuzzer
+import org.utbot.engine.greyboxfuzzer.ZestFuzzer
 import org.utbot.framework.PathSelectorType
 import org.utbot.framework.UtSettings
 import org.utbot.framework.UtSettings.checkSolverTimeoutMillis
@@ -141,8 +141,6 @@ import org.utbot.fuzzer.FuzzedMethodDescription
 import org.utbot.fuzzer.ModelProvider
 import org.utbot.fuzzer.FallbackModelProvider
 import org.utbot.fuzzer.collectConstantsForFuzzer
-import org.utbot.fuzzer.defaultModelProviders
-import org.utbot.fuzzer.fuzz
 import org.utbot.instrumentation.ConcreteExecutor
 import soot.ArrayType
 import soot.BooleanType
@@ -242,7 +240,6 @@ import kotlin.math.min
 import kotlin.reflect.full.instanceParameter
 import kotlin.reflect.full.valueParameters
 import kotlin.reflect.jvm.javaType
-import kotlin.system.exitProcess
 
 private val logger = KotlinLogging.logger {}
 val pathLogger = KotlinLogging.logger(logger.name + ".path")

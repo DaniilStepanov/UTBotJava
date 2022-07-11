@@ -1,4 +1,4 @@
-package org.utbot.engine.zestfuzzer
+package org.utbot.engine.greyboxfuzzer
 
 class ZestGuidance {
 }

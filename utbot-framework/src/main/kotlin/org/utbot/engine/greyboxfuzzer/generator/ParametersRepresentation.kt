@@ -1,14 +1,7 @@
-package org.utbot.engine.zestfuzzer.generator
+package org.utbot.engine.greyboxfuzzer.generator
 
-import com.pholser.junit.quickcheck.internal.generator.GeneratorRepository
-import com.pholser.junit.quickcheck.internal.generator.ServiceLoaderGeneratorSource
-import com.pholser.junit.quickcheck.random.SourceOfRandomness
-import edu.berkeley.cs.jqf.fuzz.junit.quickcheck.NonTrackingGenerationStatus
-import org.utbot.external.api.classIdForType
-import org.utbot.framework.concrete.UtModelConstructor
 import org.utbot.framework.plugin.api.UtModel
 import java.lang.reflect.Parameter
-import java.util.*
 
 class ParametersRepresentation(private val parameters: Array<Parameter>) {
     private val ffields = mutableListOf<FField>()

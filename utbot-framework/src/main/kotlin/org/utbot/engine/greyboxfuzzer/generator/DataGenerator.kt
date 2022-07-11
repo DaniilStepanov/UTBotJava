@@ -1,25 +1,16 @@
-package org.utbot.engine.zestfuzzer.generator
+package org.utbot.engine.greyboxfuzzer.generator
 
 import com.pholser.junit.quickcheck.generator.ComponentizedGenerator
 import com.pholser.junit.quickcheck.generator.GenerationStatus
 import com.pholser.junit.quickcheck.generator.Generator
 import com.pholser.junit.quickcheck.internal.ParameterTypeContext
-import com.pholser.junit.quickcheck.internal.generator.ArrayGenerator
-import com.pholser.junit.quickcheck.internal.generator.GeneratorRepository
 import com.pholser.junit.quickcheck.internal.generator.ZilchGenerator
 import com.pholser.junit.quickcheck.random.SourceOfRandomness
-import org.utbot.engine.zestfuzzer.util.getAllDeclaredFields
-import org.utbot.engine.zestfuzzer.util.getArrayValues
-import org.utbot.engine.zestfuzzer.util.getFieldValue
-import org.utbot.engine.zestfuzzer.util.hasModifiers
-import sun.reflect.generics.reflectiveObjects.ParameterizedTypeImpl
-import java.lang.reflect.Field
+import org.utbot.engine.greyboxfuzzer.util.getAllDeclaredFields
+import org.utbot.engine.greyboxfuzzer.util.getFieldValue
+import org.utbot.engine.greyboxfuzzer.util.hasModifiers
 import java.lang.reflect.Modifier
 import java.lang.reflect.Parameter
-import kotlin.reflect.KFunction
-import kotlin.system.exitProcess
-import kotlin.reflect.KFunction2
-import java.lang.reflect.Array as JArray
 
 object DataGenerator {
 
@@ -30,7 +21,9 @@ object DataGenerator {
         val generator = generatorRepository.getOrProduceGenerator(parameter)
         var generatedValue: Any? = null
         repeat(10) {
-            generator.generate(random, status)?.let { generatedValue = it; return@repeat }
+            generatedValue = generator.generate(random, status)
+            if (generatedValue != null) return@repeat
+            //generator.generate(random, status)?.let { generatedValue = it; return@repeat }
         }
         if (generatedValue == null) throw IllegalStateException("Cant generate value of type ${parameter.type}")
         return FParameter(parameter, generatedValue!!, generator, parameter.type.getFFieldsForClass(generatedValue!!, 0))

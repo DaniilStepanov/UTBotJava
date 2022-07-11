@@ -1,7 +1,19 @@
 package org.utbot.examples.algorithms;
 
+import java.util.ArrayList;
+
 public class BinarySearch {
-    private boolean isUnsorted(long[] array) {
+
+    public boolean testFunc(ArrayList<ArrayList<Long>> array) {
+        for (int i = 0; i < array.size() - 1; i++) {
+            if (array.get(i).get(i) > array.get(i + 1).get(i + 1)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public boolean isUnsorted(long[] array) {
         for (int i = 0; i < array.length - 1; i++) {
             if (array[i] > array[i + 1]) {
                 return true;

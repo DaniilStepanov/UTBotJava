@@ -1,4 +1,4 @@
-package org.utbot.engine.zestfuzzer.util.kcheck
+package org.utbot.engine.greyboxfuzzer.util.kcheck
 
 import java.util.*
 

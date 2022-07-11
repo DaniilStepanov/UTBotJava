@@ -1,0 +1,19 @@
+apply from: "${parent.projectDir}/gradle/include/jvm-project.gradle"
+
+
+repositories{
+    mavenLocal()
+}
+
+dependencies {
+    api project(':utbot-framework-api')
+    api project(':utbot-fuzzers')
+    api project(':utbot-instrumentation')
+    implementation "com.github.UnitTestBot:soot:${soot_commit_hash}"
+    implementation group: 'io.github.microutils', name: 'kotlin-logging', version: kotlin_logging_version
+    implementation "edu.berkeley.cs.jqf:jqf-fuzz:2.0-SNAPSHOT"
+}
+
+compileJava {
+    options.compilerArgs = []
+}

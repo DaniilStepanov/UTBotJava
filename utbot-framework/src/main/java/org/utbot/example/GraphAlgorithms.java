@@ -5,7 +5,7 @@ import java.util.Deque;
 import java.util.LinkedList;
 import java.util.Locale;
 
-public class GraphAlgorithms<T> {
+public class GraphAlgorithms<T extends Number> {
     public static boolean bfs(Graph graph, int startNodeNumber, int goalNodeNumber) {
         Deque<Integer> queue = new LinkedList<>();//(graph.getSize());
         boolean[] visited = new boolean[graph.getSize()];
@@ -51,7 +51,7 @@ public class GraphAlgorithms<T> {
         return false;
     }
 
-    public boolean testFunc3(A<Integer> a) {
+    public boolean testFunc3(D<Integer, Integer> d) {
 //        for (int i = 0; i < array.size() - 1; i++) {
 //            if (array.get(i).a > array.get(i + 1).a) {
 //                return true;

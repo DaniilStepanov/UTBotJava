@@ -1,5 +1,10 @@
 apply from: "${parent.projectDir}/gradle/include/jvm-project.gradle"
 
+
+repositories{
+    mavenLocal()
+}
+
 dependencies {
     api project(':utbot-framework-api')
     implementation "com.github.UnitTestBot:soot:${soot_commit_hash}"
