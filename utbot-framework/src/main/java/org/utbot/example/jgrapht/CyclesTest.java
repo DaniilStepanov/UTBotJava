@@ -31,10 +31,13 @@ package org.utbot.example.jgrapht;
 import edu.berkeley.cs.jqf.fuzz.Fuzz;
 import edu.berkeley.cs.jqf.fuzz.JQF;
 import org.jgrapht.DirectedGraph;
+import org.jgrapht.Graph;
 import org.jgrapht.alg.cycle.JohnsonSimpleCycles;
 import org.jgrapht.alg.cycle.SzwarcfiterLauerSimpleCycles;
 import org.jgrapht.alg.cycle.TarjanSimpleCycles;
 import org.jgrapht.alg.cycle.TiernanSimpleCycles;
+import org.jgrapht.graph.DefaultDirectedGraph;
+import org.jgrapht.graph.DefaultEdge;
 import org.jgrapht.graph.SimpleDirectedGraph;
 import org.junit.After;
 import org.junit.runner.RunWith;
@@ -53,7 +56,13 @@ public class CyclesTest {
 
     boolean verbose;
 
-    public void johnson(SimpleDirectedGraph<Integer, Integer> graph) {
+    public static void main(String[] args) {
+        Graph<String, DefaultEdge> directedGraph =
+                new DefaultDirectedGraph<String, DefaultEdge>(DefaultEdge.class);
+
+        System.exit(0);
+    }
+    public void johnson(SimpleDirectedGraph<Integer, DefaultEdge> graph) {
         this.cycles = new JohnsonSimpleCycles<>(graph).findSimpleCycles();
     }
 //

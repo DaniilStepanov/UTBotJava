@@ -4,9 +4,12 @@ import com.pholser.junit.quickcheck.random.SourceOfRandomness
 import edu.berkeley.cs.jqf.fuzz.ei.ZestGuidance
 import org.utbot.engine.executeConcretely
 import org.utbot.engine.greyboxfuzzer.generator.*
+import org.utbot.external.api.classIdForType
 import org.utbot.framework.concrete.UtConcreteExecutionResult
 import org.utbot.framework.concrete.UtExecutionInstrumentation
+import org.utbot.framework.concrete.UtModelConstructor
 import org.utbot.framework.plugin.api.*
+import org.utbot.framework.plugin.api.util.id
 import org.utbot.instrumentation.ConcreteExecutor
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
@@ -34,12 +37,6 @@ class ZestFuzzer(
      */
     private val MEAN_MUTATION_SIZE = 4.0 // Bytes
 
-    //private val sourceOfRandomness = SourceOfRandomness(Random(42))
-
-    //private val generatorRepository = GeneratorRepository(sourceOfRandomness).register(ServiceLoaderGeneratorSource())
-
-    //private val genStatus = NonTrackingGenerationStatus(DataGeneratorSettings.sourceOfRandomness)
-
     suspend fun fuzz(): Sequence<List<UtModel>> {
         val kfunction = methodUnderTest.callable as KFunction<*>
         val method = kfunction.javaMethod!!
@@ -53,14 +50,26 @@ class ZestFuzzer(
                     DataGeneratorSettings.genStatus
                 )
             }
-            val generatedParameterAsUtModel = generatedParameters.map { UtPrimitiveModel(it.value) }
+            if (generatedParameters.any { it == null }) return@repeat
+//            val generatedParameterAsUtModel = generatedParameters.map { UtPrimitiveModel(it!!.value) }
+            //public void testLocalDateTimeSerialization(int year, int month, int dayOfMonth, int hour, int minute, int second) {
+            val generatedParameterAsUtModel = generatedParameters.map {
+                UtModelConstructor(IdentityHashMap()).construct(it!!.value, classIdForType(it.value::class.java))
+            }
             val initialEnvironmentModels = EnvironmentModels(thisInstance, generatedParameterAsUtModel, mapOf())
-            val executionResult =
-                concreteExecutor.executeConcretely(methodUnderTest, initialEnvironmentModels, listOf())
-            println("EXEC RES = ${executionResult.result}")
-            println("COVERAGE = ${executionResult.coverage.coveredInstructions.size}")
-            if (executionResult.coverage.coveredInstructions.size > maxCoverage) {
-                maxCoverage = executionResult.coverage.coveredInstructions.size
+            println("EXECUTING FUNCTION")
+            try {
+                val executionResult =
+                    concreteExecutor.executeConcretely(methodUnderTest, initialEnvironmentModels, listOf())
+                println("EXEC RES = ${executionResult.result}")
+                println("COVERAGE = ${executionResult.coverage.coveredInstructions.size}")
+                if (executionResult.coverage.coveredInstructions.size > maxCoverage) {
+                    maxCoverage = executionResult.coverage.coveredInstructions.size
+                }
+            } catch (e: Error) {
+                println("Error :(")
+            } catch (e: Exception) {
+                println("Exception :( $e")
             }
             println("--------------------------------")
         }

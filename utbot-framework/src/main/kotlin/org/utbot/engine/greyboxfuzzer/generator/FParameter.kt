@@ -8,7 +8,7 @@ import java.lang.reflect.Parameter
 data class FParameter(
     val parameter: Parameter,
     val value: Any,
-    val generator: Generator<*>,
+    val generator: Generator<*>?,
     val classId: ClassId,
     val fields: List<FField>
 ) {
@@ -16,13 +16,13 @@ data class FParameter(
     constructor(
         parameter: Parameter,
         value: Any,
-        generator: Generator<*>
+        generator: Generator<*>?
     ) : this(parameter, value, generator, classIdForType(parameter.type), emptyList())
 
     constructor(
         parameter: Parameter,
         value: Any,
-        generator: Generator<*>,
+        generator: Generator<*>?,
         fields: List<FField>
     ) : this(parameter, value, generator, classIdForType(parameter.type), fields)
 

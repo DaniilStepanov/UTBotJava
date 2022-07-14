@@ -1,6 +1,9 @@
 package org.utbot.engine.greyboxfuzzer.generator
 
+import com.pholser.junit.quickcheck.generator.ComponentizedGenerator
 import com.pholser.junit.quickcheck.generator.Generator
+import com.pholser.junit.quickcheck.generator.InRange
+import com.pholser.junit.quickcheck.generator.java.lang.IntegerGenerator
 import com.pholser.junit.quickcheck.internal.ParameterTypeContext
 import com.pholser.junit.quickcheck.internal.generator.GeneratorRepository
 import com.pholser.junit.quickcheck.internal.generator.LambdaGenerator
@@ -14,6 +17,28 @@ import java.lang.reflect.Field
 import java.lang.reflect.Modifier
 import java.lang.reflect.Parameter
 import java.lang.reflect.Type
+
+
+fun ComponentizedGenerator<*>.getComponents(): List<Generator<*>> {
+    val components = this.javaClass.getAllDeclaredFields().find { it.name == "components" } ?: return listOf()
+    return components.let {
+        it.isAccessible = true
+        it.get(this) as List<Generator<*>>
+    }.also { components.isAccessible = false }
+}
+
+fun Generator<*>.getAllComponents(): List<Generator<*>> {
+    if (this !is ComponentizedGenerator<*>) return emptyList()
+    val que = ArrayDeque<Generator<*>>()
+    val res = mutableListOf<Generator<*>>()
+    this.getComponents().forEach { que.add(it) }
+    while (que.isNotEmpty()) {
+        val comp = que.removeFirst()
+        res.add(comp)
+        (comp as? ComponentizedGenerator<*>)?.getComponents()?.forEach(que::add)
+    }
+    return res
+}
 
 val Generator<*>.isUserGenerator: Boolean
     get() = this is UserClassesGenerator
@@ -36,23 +61,23 @@ fun GeneratorRepository.addGenerator(
 }
 
 
-fun GeneratorRepository.getOrProduceGenerator(field: Field, depth: Int = 0): Generator<*> =
+fun GeneratorRepository.getOrProduceGenerator(field: Field, depth: Int = 0): Generator<*>? =
     getOrProduceGenerator(ParameterTypeContext.forField(field), depth)
 
-fun GeneratorRepository.getOrProduceGenerator(param: Parameter, depth: Int = 0): Generator<*> =
+fun GeneratorRepository.getOrProduceGenerator(param: Parameter, depth: Int = 0): Generator<*>? =
     getOrProduceGenerator(ParameterTypeContext.forParameter(param), depth)
 
 fun GeneratorRepository.getOrProduceGenerator(
     parameterTypeContext: ParameterTypeContext,
     depth: Int = 0
-): Generator<*> {
+): Generator<*>? {
     val allTypeParameters = parameterTypeContext.getAllTypeParameters()
     val clazz = parameterTypeContext.type().toClass()
     var generator: Generator<*>
     while (true) {
         try {
             println("TRYING TO GET GENERATOR FOR ${parameterTypeContext.type()}")
-            generator = this.produceGenerator(parameterTypeContext)
+            generator = this.produceGenerator(parameterTypeContext).also { GeneratorConfigurator().configureGenerator(it, 100) }
             if (generator is UserClassesGenerator) {
                 generator.depth = depth
             } else if (generator is LambdaGenerator<*, *> && clazz.hasAtLeastOneOfModifiers(Modifier.INTERFACE, Modifier.ABSTRACT)) {
@@ -62,7 +87,11 @@ fun GeneratorRepository.getOrProduceGenerator(
         } catch (e: java.lang.IllegalArgumentException) {
             //ADD GENERATOR
             val className = e.localizedMessage.substringAfterLast("of type ")
-            val classWithMissingGenerator = Class.forName(className.substringBefore('<'))
+            val classWithMissingGenerator = try {
+                Class.forName(className.substringBefore('<'))
+            } catch (e: ClassNotFoundException) {
+                return null
+            }
             val typeWithActualTypeParams =
                 allTypeParameters.find { it.typeName == className } ?: parameterTypeContext.type()
             this.addGenerator(

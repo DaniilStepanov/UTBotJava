@@ -55,17 +55,21 @@ class UserClassesGenerator : ComponentizedGenerator<Any>(Any::class.java) {
         return parameterTypeContext!!.getResolvedType().typeParameters.first().type.componentClass
     }
 
-    private fun generateParameterizedTypeImpl(clazz: Class<*>, actualTypeParameters: Array<Type>): ParameterizedTypeImpl {
+    private fun generateParameterizedTypeImpl(
+        clazz: Class<*>,
+        actualTypeParameters: Array<Type>
+    ): ParameterizedTypeImpl {
         val constructor = ParameterizedTypeImpl::class.java.declaredConstructors.first()
         constructor.isAccessible = true
         return constructor.newInstance(clazz, actualTypeParameters, null) as ParameterizedTypeImpl
     }
+
     private fun generateImplementerInstance(random: SourceOfRandomness?, status: GenerationStatus?): Any? {
         val sootClass = Scene.v().classes.find { it.name == parameterType!!.toClass().name } ?: return null
         val hierarchy = Hierarchy()
-        val implementers = sootClass.getImplementersOfWithChain(hierarchy)//Hierarchy().getImplementersOf(sootClass).ifEmpty { return null }
-        //TODO!!! randomOrNull()
-        val randomImplementersChain = implementers?.lastOrNull()?.drop(1) ?: return null
+        val implementers =
+            sootClass.getImplementersOfWithChain(hierarchy)//Hierarchy().getImplementersOf(sootClass).ifEmpty { return null }
+        val randomImplementersChain = implementers?.randomOrNull()?.drop(1) ?: return null
         val generics = mutableListOf<Pair<Type, MutableList<Type>>>()
         val resolvedType = parameterTypeContext!!.getGenericContext().resolveType(parameterType)
         var prevImplementer = sootClass.toJavaClass()
@@ -74,10 +78,11 @@ class UserClassesGenerator : ComponentizedGenerator<Any>(Any::class.java) {
         }
         for (implementer in randomImplementersChain) {
             val javaImplementer = implementer.toJavaClass()
-            val extendType = javaImplementer.let { it.genericInterfaces + it.genericSuperclass }.find { it.toClass() == prevImplementer }
+            val extendType = javaImplementer.let { it.genericInterfaces + it.genericSuperclass }
+                .find { it.toClass() == prevImplementer }
             (extendType as? ParameterizedTypeImpl)
             val tp = prevImplementer.typeParameters
-            val newTp = (extendType as sun.reflect.generics.reflectiveObjects.ParameterizedTypeImpl).actualTypeArguments
+            val newTp = (extendType as ParameterizedTypeImpl).actualTypeArguments
             tp.mapIndexed { index, typeVariable -> typeVariable to newTp[index] }
                 .forEach { typeVar ->
                     val indexOfTypeParam = generics.indexOfFirst { it.second.last() == typeVar.first }
@@ -87,11 +92,21 @@ class UserClassesGenerator : ComponentizedGenerator<Any>(Any::class.java) {
                 }
             prevImplementer = javaImplementer
         }
-        val g = prevImplementer.typeParameters.map { tp -> tp.name to generics.find { it.second.last() == tp }?.first }.toMap()
+        val g = prevImplementer.typeParameters.map { tp -> tp.name to generics.find { it.second.last() == tp }?.first }
+            .toMap()
         val actualTypeParams = prevImplementer.typeParameters.map { g[it.name] ?: return null }.toTypedArray()
         val parameterizedType = generateParameterizedTypeImpl(prevImplementer, actualTypeParams)
-        //TODO
-        return null
+        val gm = LinkedHashMap<String, Type>()
+        g.forEach { gm.put(it.key, it.value!!) }
+        val m = mutableMapOf(prevImplementer to gm)
+        val genericsContext = GenericsContext(GenericsInfo(prevImplementer, m), prevImplementer)
+        return if (Random.nextBoolean()) {
+            generateInstanceViaConstructor(prevImplementer, genericsContext, depth + 1)
+                ?: generateInstanceWithStatics(Types.forJavaLangReflectType(parameterizedType), genericsContext, depth + 1)
+        } else {
+            generateInstanceWithStatics(Types.forJavaLangReflectType(parameterizedType), genericsContext, depth + 1) ?:
+            generateInstanceViaConstructor(prevImplementer, genericsContext, depth + 1)
+        }
     }
 
     override fun generate(random: SourceOfRandomness?, status: GenerationStatus?): Any? {
@@ -101,7 +116,7 @@ class UserClassesGenerator : ComponentizedGenerator<Any>(Any::class.java) {
         if (parameterType!!.toClass().name == "java.lang.Class") return generateClass()
         val modifiers = parameterType!!.toClass().modifiers
         //TODO! generate instances of abstract classes and interfaces
-        if (modifiers.and(Modifier.ABSTRACT) > 0 || modifiers.and(Modifier.INTERFACE) > 0)  {
+        if (modifiers.and(Modifier.ABSTRACT) > 0 || modifiers.and(Modifier.INTERFACE) > 0) {
             return generateImplementerInstance(random, status)
         }
 //        if (parameterType!!.typeName) {
@@ -121,7 +136,6 @@ class UserClassesGenerator : ComponentizedGenerator<Any>(Any::class.java) {
         val m = mutableMapOf(clazz!! to gm)
         val genericsInfo = GenericsInfo(clazz, m)
         val gctx = GenericsContext(genericsInfo, clazz)
-        return generateInstanceViaConstructor(resolvedType.toClass(), gctx, depth)
         val inst =
             if (Random.getTrue(50)) {
                 generateInstanceViaConstructor(resolvedType.toClass(), gctx, depth)
@@ -250,7 +264,8 @@ class UserClassesGenerator : ComponentizedGenerator<Any>(Any::class.java) {
             println("OLD TYPE = ${parameter.type}")
             val resolvedParameterType = GenericsUtils.resolveTypeVariables(parameter.parameterizedType, generics)
             println("NEW TYPE = ${resolvedParameterType}")
-            val value = generateParameterValue(parameter, resolvedType.componentClass.name, gctx, false, resolvedParameterType)
+            val value =
+                generateParameterValue(parameter, resolvedType.componentClass.name, gctx, false, resolvedParameterType)
             println("GENERATED VALUE = $value")
             value
         }
@@ -352,7 +367,7 @@ class UserClassesGenerator : ComponentizedGenerator<Any>(Any::class.java) {
 
         val generator = DataGeneratorSettings.generatorRepository.getOrProduceGenerator(context, depth + 1)
         //generator.generate(DataGeneratorSettings.sourceOfRandomness, DataGeneratorSettings.genStatus)
-        val fieldValue = generator.generate(DataGeneratorSettings.sourceOfRandomness, DataGeneratorSettings.genStatus)
+        val fieldValue = generator?.generate(DataGeneratorSettings.sourceOfRandomness, DataGeneratorSettings.genStatus)
         return fieldValue
     }
 

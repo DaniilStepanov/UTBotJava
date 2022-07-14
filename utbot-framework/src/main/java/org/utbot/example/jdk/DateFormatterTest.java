@@ -46,10 +46,8 @@ import java.util.Date;
 /**
  * @author Rohan Padhye
  */
-@RunWith(JQF.class)
 public class DateFormatterTest {
 
-    @Fuzz
     public void fuzzSimple(Date date, String format) throws IllegalArgumentException {
         // Create a formatter using the input format
         DateFormat df = new SimpleDateFormat(format);
@@ -61,18 +59,11 @@ public class DateFormatterTest {
         }
     }
 
-    @Fuzz
     public void fuzzLocalDateTime(String date, String pattern) throws IllegalArgumentException, DateTimeParseException {
         LocalDateTime.parse(date, DateTimeFormatter.ofPattern(pattern));
     }
 
-    @Fuzz
-    public void testLocalDateTimeSerialization(@InRange(minInt=0) int year,
-                                               @InRange(minInt=1, maxInt=12) int month,
-                                               @InRange(minInt=1, maxInt=31) int dayOfMonth,
-                                               @InRange(minInt=0, maxInt=23) int hour,
-                                               @InRange(minInt=0, maxInt=59) int minute,
-                                               @InRange(minInt=0, maxInt=59) int second) {
+    public void testLocalDateTimeSerialization(int year, int month, int dayOfMonth, int hour, int minute, int second) {
         LocalDateTime ldt1 = null, ldt2;
         String s1, s2;
         try {
@@ -89,7 +80,6 @@ public class DateFormatterTest {
 
     }
 
-    @Fuzz
     public void testLocalDateTimeSerialization2(String s) {
         LocalDateTime ldt1 = null, ldt2;
         String s1, s2;

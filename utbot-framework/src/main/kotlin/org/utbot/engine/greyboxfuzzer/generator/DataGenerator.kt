@@ -11,22 +11,30 @@ import org.utbot.engine.greyboxfuzzer.util.getFieldValue
 import org.utbot.engine.greyboxfuzzer.util.hasModifiers
 import java.lang.reflect.Modifier
 import java.lang.reflect.Parameter
+import kotlin.system.exitProcess
 
 object DataGenerator {
 
     private val generatorRepository = DataGeneratorSettings.generatorRepository
 
-    fun generate(parameter: Parameter, random: SourceOfRandomness, status: GenerationStatus): FParameter {
+    fun generate(parameter: Parameter, random: SourceOfRandomness, status: GenerationStatus): FParameter? {
         //TODO INPUT RANDOM TYPES INSTEAD OF TYPE PARAMETERS
         val generator = generatorRepository.getOrProduceGenerator(parameter)
         var generatedValue: Any? = null
         repeat(10) {
-            generatedValue = generator.generate(random, status)
-            if (generatedValue != null) return@repeat
+            generatedValue = generator?.generate(random, status) ?: return@repeat
+            println("GENERATED VALUE OF TYPE ${parameter.parameterizedType} = $generatedValue")
+            if (generatedValue != null) {
+                return FParameter(
+                    parameter,
+                    generatedValue!!,
+                    generator,
+                    parameter.type.getFFieldsForClass(generatedValue!!, 0)
+                )
+            }
             //generator.generate(random, status)?.let { generatedValue = it; return@repeat }
         }
-        if (generatedValue == null) throw IllegalStateException("Cant generate value of type ${parameter.type}")
-        return FParameter(parameter, generatedValue!!, generator, parameter.type.getFFieldsForClass(generatedValue!!, 0))
+        throw IllegalStateException("Cant generate value of type ${parameter.type}")
     }
 
 
@@ -110,15 +118,6 @@ object DataGenerator {
             }
         }
         return subFields
-    }
-
-
-    private fun ComponentizedGenerator<*>.getComponents(): List<Generator<*>> {
-        val components = this.javaClass.getAllDeclaredFields().find { it.name == "components" } ?: return listOf()
-        return components.let {
-            it.isAccessible = true
-            it.get(this) as List<Generator<*>>
-        }.also { components.isAccessible = false }
     }
 
 }

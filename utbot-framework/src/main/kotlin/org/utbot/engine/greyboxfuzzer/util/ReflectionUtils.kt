@@ -52,6 +52,7 @@ fun Field.getArrayValues(instance: Any): List<Any> {
 //
 //}
 
+fun Class<*>.getDeclaredFieldEvenNested(name: String) = this.getAllDeclaredFields().find { it.name == name }
 fun Class<*>.getAllSuperClassesAndInterfaces(): List<Class<*>> {
     val res = mutableListOf<Class<*>>()
     var superClass = this.superclass
@@ -77,6 +78,22 @@ fun Field.getFieldValue(instance: Any?): Any? {
         Float::class.javaObjectType -> this.getFloat(instance)
         Double::class.javaObjectType -> this.getDouble(instance)
         else -> this.get(instance)
+    }.also { this.isAccessible = oldAccessibleFlag }
+}
+
+fun Field.setFieldValue(instance: Any?, fieldValue: Any?) {
+    val oldAccessibleFlag = this.isAccessible
+    this.isAccessible = true
+    when (this.type) {
+        Boolean::class.javaObjectType -> this.setBoolean(instance, fieldValue as Boolean)
+        Byte::class.javaObjectType -> this.setByte(instance, fieldValue as Byte)
+        Char::class.javaObjectType -> this.setChar(instance, fieldValue as Char)
+        Short::class.javaObjectType -> this.setShort(instance, fieldValue as Short)
+        Int::class.javaObjectType -> this.setInt(instance, fieldValue as Int)
+        Long::class.javaObjectType -> this.setLong(instance, fieldValue as Long)
+        Float::class.javaObjectType -> this.setFloat(instance, fieldValue as Float)
+        Double::class.javaObjectType -> this.setDouble(instance, fieldValue as Double)
+        else -> this.set(instance, fieldValue)
     }.also { this.isAccessible = oldAccessibleFlag }
 }
 

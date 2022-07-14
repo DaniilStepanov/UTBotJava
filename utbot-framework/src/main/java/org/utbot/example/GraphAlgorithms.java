@@ -1,9 +1,6 @@
 package org.utbot.example;
 
-import java.util.ArrayList;
-import java.util.Deque;
-import java.util.LinkedList;
-import java.util.Locale;
+import java.util.*;
 
 public class GraphAlgorithms<T extends Number> {
     public static boolean bfs(Graph graph, int startNodeNumber, int goalNodeNumber) {
@@ -51,7 +48,7 @@ public class GraphAlgorithms<T extends Number> {
         return false;
     }
 
-    public boolean testFunc3(D<Integer, Integer> d) {
+    public boolean testFunc3(String a) {
 //        for (int i = 0; i < array.size() - 1; i++) {
 //            if (array.get(i).a > array.get(i + 1).a) {
 //                return true;

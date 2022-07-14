@@ -5,6 +5,7 @@ import org.utbot.common.FileUtil
 import org.utbot.example.CalendarLogic
 import org.utbot.example.GraphAlgorithms
 import org.utbot.example.PrimitiveFields
+import org.utbot.example.jdk.DateFormatterTest
 import org.utbot.example.jgrapht.CyclesTest
 import org.utbot.external.api.TestMethodInfo
 import org.utbot.external.api.UtBotJavaApi.fuzzingTestCases
@@ -137,5 +138,5 @@ fun fields(
 }
 
 fun main() {
-    FuzzerExecutor().testSimpleFuzzing(GraphAlgorithms::class.java, "testFunc3")
+    FuzzerExecutor().testSimpleFuzzing(GraphAlgorithms::class.java, "bfs")
 }
