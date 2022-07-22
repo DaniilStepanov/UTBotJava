@@ -48,7 +48,7 @@ public class GraphAlgorithms<T extends Number> {
         return false;
     }
 
-    public boolean testFunc3(String a) {
+    public boolean testFunc3(ArrayList<H> a) {
 //        for (int i = 0; i < array.size() - 1; i++) {
 //            if (array.get(i).a > array.get(i + 1).a) {
 //                return true;

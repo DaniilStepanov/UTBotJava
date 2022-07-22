@@ -2,11 +2,13 @@ package org.utbot.engine.greyboxfuzzer
 
 import org.jgrapht.graph.SimpleDirectedGraph
 import org.utbot.common.FileUtil
-import org.utbot.example.CalendarLogic
 import org.utbot.example.GraphAlgorithms
 import org.utbot.example.PrimitiveFields
-import org.utbot.example.jdk.DateFormatterTest
-import org.utbot.example.jgrapht.CyclesTest
+import org.utbot.example.algorithms.ArraysQuickSort
+import org.utbot.example.algorithms.BinarySearch
+import org.utbot.example.codegen.deepequals.DeepEqualsTestingClass
+import org.utbot.example.jdk.SetsTest
+import org.utbot.example.mixed.Simplifier
 import org.utbot.external.api.TestMethodInfo
 import org.utbot.external.api.UtBotJavaApi.fuzzingTestCases
 import org.utbot.external.api.UtBotJavaApi.stopConcreteExecutorOnExit
@@ -19,9 +21,14 @@ import java.io.File
 import java.lang.reflect.Method
 import java.net.URL
 import java.net.URLClassLoader
+import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.Paths
 import java.util.*
 import java.util.stream.Collectors
+import kotlin.io.path.ExperimentalPathApi
+import kotlin.io.path.name
+import kotlin.streams.toList
 
 class FuzzerExecutor {
 
@@ -137,6 +144,31 @@ fun fields(
         .toMutableMap()
 }
 
+@OptIn(ExperimentalPathApi::class)
 fun main() {
-    FuzzerExecutor().testSimpleFuzzing(GraphAlgorithms::class.java, "bfs")
+    val cl = Files.walk(Paths.get("utbot-framework/src/main/java/org/utbot/example/")).toList()
+        .filter { it!!.name.endsWith(".java") }
+        .map { it.toFile().absolutePath.substringAfterLast("java/").replace('/', '.').substringBeforeLast(".java") }
+        .map { Class.forName(it) }
+    //114!!
+    var i = 0
+    FuzzerExecutor().testSimpleFuzzing(GraphAlgorithms::class.java, "testFunc3")
+//    for (c in cl) {
+//        ++i
+//        val methods = c.declaredMethods.filter { it.parameters.isNotEmpty() }.filter { !it.name.contains('$') }
+//        for (m in methods) {
+//            println("$i CLASS = ${c.name} from ${cl.size} method = ${m.name}")
+//            try {
+//                FuzzerExecutor().testSimpleFuzzing(c, m.name)
+//            } catch (e: RuntimeException) {
+//                println("No method source")
+//            }
+//        }
+//    }
+
+//    //TODO BUG!!
+//    repeat(100) {
+//        FuzzerExecutor().testSimpleFuzzing(Gra::class.java, "returnQuadrilateralFromNode")
+//    }
+    //FuzzerExecutor().testSimpleFuzzing(DateFormatterTest::class.java, "testLocalDateTimeSerialization")
 }

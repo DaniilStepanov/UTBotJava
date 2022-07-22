@@ -1,6 +1,8 @@
 package org.utbot.engine.greyboxfuzzer.util
 
+import org.utbot.engine.rawType
 import org.utbot.framework.codegen.model.constructor.tree.isStatic
+import sun.reflect.generics.reflectiveObjects.GenericArrayTypeImpl
 import sun.reflect.generics.reflectiveObjects.ParameterizedTypeImpl
 import java.lang.reflect.Array as RArray
 import java.lang.reflect.Field
@@ -101,6 +103,7 @@ fun Type.toClass(): Class<*> =
     when (this) {
         is ParameterizedTypeImpl -> this.rawType
         is ru.vyarus.java.generics.resolver.context.container.ParameterizedTypeImpl -> this.rawType.toClass()
+        is GenericArrayTypeImpl -> this.genericComponentType.toClass()
         else -> this as Class<*>
     }
 

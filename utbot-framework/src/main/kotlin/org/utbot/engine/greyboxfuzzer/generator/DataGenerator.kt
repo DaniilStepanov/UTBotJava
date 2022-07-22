@@ -21,7 +21,7 @@ object DataGenerator {
         //TODO INPUT RANDOM TYPES INSTEAD OF TYPE PARAMETERS
         val generator = generatorRepository.getOrProduceGenerator(parameter)
         var generatedValue: Any? = null
-        repeat(10) {
+        repeat(3) {
             generatedValue = generator?.generate(random, status) ?: return@repeat
             println("GENERATED VALUE OF TYPE ${parameter.parameterizedType} = $generatedValue")
             if (generatedValue != null) {
@@ -29,6 +29,7 @@ object DataGenerator {
                     parameter,
                     generatedValue!!,
                     generator,
+                    //emptyList()
                     parameter.type.getFFieldsForClass(generatedValue!!, 0)
                 )
             }
@@ -38,6 +39,7 @@ object DataGenerator {
     }
 
 
+    //TODO Make it work with type parameters
     private fun Class<*>.getFFieldsForClass(value: Any, depth: Int): List<FField> {
         if (depth >= DataGeneratorSettings.maxDepthOfGeneration) {
             return emptyList()

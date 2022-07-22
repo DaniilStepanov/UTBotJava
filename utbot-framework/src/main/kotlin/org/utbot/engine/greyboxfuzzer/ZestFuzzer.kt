@@ -41,7 +41,7 @@ class ZestFuzzer(
         val kfunction = methodUnderTest.callable as KFunction<*>
         val method = kfunction.javaMethod!!
         var maxCoverage = 0
-        repeat(1000) {
+        repeat(1) {
             println("EXECUTION NUMBER $it")
             val generatedParameters = method.parameters.map { parameter ->
                 DataGenerator.generate(
@@ -51,6 +51,7 @@ class ZestFuzzer(
                 )
             }
             if (generatedParameters.any { it == null }) return@repeat
+            println("GENERATED PARAMS = $generatedParameters")
 //            val generatedParameterAsUtModel = generatedParameters.map { UtPrimitiveModel(it!!.value) }
             //public void testLocalDateTimeSerialization(int year, int month, int dayOfMonth, int hour, int minute, int second) {
             val generatedParameterAsUtModel = generatedParameters.map {
@@ -69,63 +70,11 @@ class ZestFuzzer(
             } catch (e: Error) {
                 println("Error :(")
             } catch (e: Exception) {
-                println("Exception :( $e")
+                println("Exception :( ")
             }
             println("--------------------------------")
         }
         println("MAX COVERAGE = $maxCoverage")
-//        val param: Parameter = method.parameters.first()
-//        val generatorRepository = DataGeneratorSettings.generatorRepository
-//        val generator = DataGenerator(generatorRepository)
-//        repeat(100) {
-//            val instance1 =
-//                generator.generate(param, DataGeneratorSettings.sourceOfRandomness, DataGeneratorSettings.genStatus)
-//            println("INST = $instance1")
-//        }
-//        val instance2 = generator.generate(param, DataGeneratorSettings.sourceOfRandomness, genStatus)
-//        ObjectMerger().mergeObjects(instance1, instance2)
-//        println()
-        exitProcess(0)
-//        val generatorsField = generatorRepository.javaClass.getAllDeclaredFields().find { it.name == "generators" }!!
-//        generatorsField.isAccessible = true
-//        val generators: MutableMap<Class<*>, Set<Generator<*>>> =
-//            (generatorsField.get(generatorRepository) as Map<Class<*>, Set<Generator<*>>>).toMutableMap()
-
-//        generatorRepository.register(UserClassesGenerator.generatorInstance)
-//        val instance = Reflection.instantiate(UserClassesGenerator::class.java) as Generator<*>
-//        println("IN = $instance")
-////        exitProcess(0)
-
-        //val generator =
-        //val instance = generator.generate(DataGeneratorSettings.sourceOfRandomness, genStatus)
-//        println("INSTANCE = $instance")
-//        exitProcess(0)
-//        CurrentClassForGeneration.currentClass = Graph::class.java
-//        val generator = generatorRepository.produceGenerator(ParameterTypeContext.forClass(CurrentClassForGeneration::class.java))
-//        println("GEN = $generator")
-//        println("GENERATED = ${generator.generate(DataGeneratorSettings.sourceOfRandomness, genStatus)}")
-//        println("INSTANCE = ${CurrentClassForGeneration.instance}")
-//        exitProcess(0)
-//        exitProcess(0)
-
-
-//        val paramValue =
-//            DataGenerator(generatorRepository).generate(param, DataGeneratorSettings.sourceOfRandomness, DataGeneratorSettings.genStatus)
-//        println("PARAM VALUE = $paramValue")
-        //val parameter = UniversalGenerator(method.parameters.first().type).generate()
-        //println("P = $parameter")
-
-//        repeat(1000) {
-//
-//
-//            val initialEnvironmentModels = EnvironmentModels(thisInstance, generatedParams, mapOf())
-//            val executionResult =
-//                concreteExecutor.executeConcretely(methodUnderTest, initialEnvironmentModels, listOf())
-////            println("EXEC RES = ${executionResult.result}")
-////            println("COVERAGE = ${executionResult.coverage.coveredInstructions.size}")
-////            println("--------------------------------")
-//        }
-        exitProcess(0)
         return sequenceOf()
     }
 

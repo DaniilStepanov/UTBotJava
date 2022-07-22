@@ -112,7 +112,7 @@ class UserClassesGenerator : ComponentizedGenerator<Any>(Any::class.java) {
     override fun generate(random: SourceOfRandomness?, status: GenerationStatus?): Any? {
         parameterType ?: return null
         clazz ?: return null
-        println("TRYING TO GENERATE $parameterType")
+        println("TRYING TO GENERATE $parameterType depth: $depth")
         if (parameterType!!.toClass().name == "java.lang.Class") return generateClass()
         val modifiers = parameterType!!.toClass().modifiers
         //TODO! generate instances of abstract classes and interfaces
@@ -138,11 +138,11 @@ class UserClassesGenerator : ComponentizedGenerator<Any>(Any::class.java) {
         val gctx = GenericsContext(genericsInfo, clazz)
         val inst =
             if (Random.getTrue(50)) {
-                generateInstanceViaConstructor(resolvedType.toClass(), gctx, depth)
-                    ?: generateInstanceWithStatics(Types.forJavaLangReflectType(resolvedType), gctx, depth)
+                generateInstanceViaConstructor(resolvedType.toClass(), gctx, depth + 1)
+                    ?: generateInstanceWithStatics(Types.forJavaLangReflectType(resolvedType), gctx, depth + 1)
             } else {
-                generateInstanceWithStatics(Types.forJavaLangReflectType(resolvedType), gctx, depth)
-                    ?: generateInstanceViaConstructor(resolvedType.toClass(), gctx, depth)
+                generateInstanceWithStatics(Types.forJavaLangReflectType(resolvedType), gctx, depth + 1)
+                    ?: generateInstanceViaConstructor(resolvedType.toClass(), gctx, depth + 1)
             }
         return inst
 //        repeat(100) {

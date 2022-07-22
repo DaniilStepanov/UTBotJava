@@ -60,6 +60,15 @@ fun GeneratorRepository.addGenerator(
     })
 }
 
+fun GeneratorRepository.removeGenerator(
+    forClass: Class<*>
+) {
+    val generatorsField = this.javaClass.getAllDeclaredFields().find { it.name == "generators" }!!
+    generatorsField.isAccessible = true
+    val map = generatorsField.get(this) as java.util.HashMap<Class<*>, Set<Generator<*>>>
+    map.remove(forClass)
+}
+
 
 fun GeneratorRepository.getOrProduceGenerator(field: Field, depth: Int = 0): Generator<*>? =
     getOrProduceGenerator(ParameterTypeContext.forField(field), depth)
@@ -77,11 +86,13 @@ fun GeneratorRepository.getOrProduceGenerator(
     while (true) {
         try {
             println("TRYING TO GET GENERATOR FOR ${parameterTypeContext.type()}")
-            generator = this.produceGenerator(parameterTypeContext).also { GeneratorConfigurator().configureGenerator(it, 100) }
+            generator = this.produceGenerator(parameterTypeContext)
             if (generator is UserClassesGenerator) {
                 generator.depth = depth
             } else if (generator is LambdaGenerator<*, *> && clazz.hasAtLeastOneOfModifiers(Modifier.INTERFACE, Modifier.ABSTRACT)) {
                 throw IllegalStateException("")
+            } else {
+                GeneratorConfigurator.configureGenerator(generator, 100)
             }
             break
         } catch (e: java.lang.IllegalArgumentException) {
@@ -111,6 +122,9 @@ fun GeneratorRepository.getOrProduceGenerator(
                 depth
             )
         }
+    }
+    (listOf(generator) + generator.getAllComponents()).forEach {
+        if (it is UserClassesGenerator) this.removeGenerator(it.parameterType!!.toClass())
     }
     return generator
 }

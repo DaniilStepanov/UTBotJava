@@ -15,13 +15,13 @@ import org.utbot.engine.greyboxfuzzer.util.getTrue
 import org.utbot.engine.greyboxfuzzer.util.setFieldValue
 import kotlin.random.Random
 
-class GeneratorConfigurator {
-    private val minByte: Byte = -100
-    private val maxByte: Byte = 100
+object GeneratorConfigurator {
+    private const val minByte: Byte = -100
+    private const val maxByte: Byte = 100
     private val minShort: Short = -100
     private val maxShort: Short = 100
-    private val minChar: Char = 'a'
-    private val maxChar: Char = 'Z'
+    private val minChar: Char = Character.MIN_VALUE
+    private val maxChar: Char = Character.MAX_VALUE
     private val minInt: Int = -100
     private val maxInt: Int = 100
     private val minLong: Long = -100
@@ -71,7 +71,7 @@ class GeneratorConfigurator {
     }
 
     fun configureGenerator(generator: Generator<*>, prob: Int) {
-        listOf(generator) + generator.getAllComponents().forEach {
+        (listOf(generator) + generator.getAllComponents()).forEach {
             if (Random.getTrue(prob)) handleGenerator(it)
         }
     }
