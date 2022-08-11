@@ -51,7 +51,7 @@ class ZestFuzzer(
                 )
             }
             if (generatedParameters.any { it == null }) return@repeat
-            println("GENERATED PARAMS = $generatedParameters")
+            //println("GENERATED PARAMS = $generatedParameters")
 //            val generatedParameterAsUtModel = generatedParameters.map { UtPrimitiveModel(it!!.value) }
             //public void testLocalDateTimeSerialization(int year, int month, int dayOfMonth, int hour, int minute, int second) {
             val generatedParameterAsUtModel = generatedParameters.map {
@@ -70,7 +70,7 @@ class ZestFuzzer(
             } catch (e: Error) {
                 println("Error :(")
             } catch (e: Exception) {
-                println("Exception :( ")
+                println("Exception :( $e")
             }
             println("--------------------------------")
         }

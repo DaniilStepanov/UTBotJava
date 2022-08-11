@@ -2,6 +2,7 @@ package org.utbot.example.casts;
 
 public class GenericCastExample {
     public <R extends Comparable<R>> R max(R fst, ClassWithGenerics<Object, R> snd) {
+        new ClassWithGenerics<Integer, Integer>(1, 1).new InnerClassWithGeneric(new Integer[] {1, 2});
         int result = fst.compareTo(snd.getComparableGenericField());
         if (result >= 0) {
             return fst;

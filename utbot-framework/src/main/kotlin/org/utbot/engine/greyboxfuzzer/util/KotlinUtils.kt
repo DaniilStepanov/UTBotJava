@@ -23,3 +23,21 @@ fun <T> MutableList<T>.removeIfAndReturnRemovedElements(cond: (T) -> Boolean): L
     }
     return res
 }
+
+fun String.removeBetweenAll(startChar: Char, endChar: Char): String {
+    val resultingString = StringBuilder()
+    var flToRemove = false
+    for (ch in this) {
+        if (ch == startChar) {
+            flToRemove = true
+            continue
+        } else if (ch == endChar) {
+            flToRemove = false
+            continue
+        }
+        if (!flToRemove) {
+            resultingString.append(ch)
+        }
+    }
+    return resultingString.toString()
+}

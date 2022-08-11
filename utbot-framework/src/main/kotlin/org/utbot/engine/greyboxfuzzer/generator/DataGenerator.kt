@@ -22,8 +22,13 @@ object DataGenerator {
         val generator = generatorRepository.getOrProduceGenerator(parameter)
         var generatedValue: Any? = null
         repeat(3) {
+            println("TRY $it")
             generatedValue = generator?.generate(random, status) ?: return@repeat
-            println("GENERATED VALUE OF TYPE ${parameter.parameterizedType} = $generatedValue")
+            try {
+                println("GENERATED VALUE OF TYPE ${parameter.parameterizedType} = $generatedValue")
+            } catch (e: NullPointerException) {
+                println("VALUE GENERATED!")
+            }
             if (generatedValue != null) {
                 return FParameter(
                     parameter,
@@ -35,6 +40,7 @@ object DataGenerator {
             }
             //generator.generate(random, status)?.let { generatedValue = it; return@repeat }
         }
+        return null
         throw IllegalStateException("Cant generate value of type ${parameter.type}")
     }
 

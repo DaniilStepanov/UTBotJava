@@ -4,6 +4,7 @@ import org.utbot.engine.rawType
 import org.utbot.framework.codegen.model.constructor.tree.isStatic
 import sun.reflect.generics.reflectiveObjects.GenericArrayTypeImpl
 import sun.reflect.generics.reflectiveObjects.ParameterizedTypeImpl
+import java.lang.reflect.Constructor
 import java.lang.reflect.Array as RArray
 import java.lang.reflect.Field
 import java.lang.reflect.Method
@@ -154,6 +155,8 @@ var Field.isFinal: Boolean
 fun Method.hasModifiers(vararg modifiers: Int) = modifiers.all { it.and(this.modifiers) > 0 }
 fun Field.hasModifiers(vararg modifiers: Int) = modifiers.all { it.and(this.modifiers) > 0 }
 fun Class<*>.hasModifiers(vararg modifiers: Int) = modifiers.all { it.and(this.modifiers) > 0 }
+fun Constructor<*>.hasModifiers(vararg modifiers: Int) = modifiers.all { it.and(this.modifiers) > 0 }
+fun Constructor<*>.hasAtLeastOneOfModifiers(vararg modifiers: Int) = modifiers.any { it.and(this.modifiers) > 0 }
 fun Class<*>.hasAtLeastOneOfModifiers(vararg modifiers: Int) = modifiers.any { it.and(this.modifiers) > 0 }
 
 fun ru.vyarus.java.generics.resolver.context.container.ParameterizedTypeImpl.getActualArguments(): Array<Type> {

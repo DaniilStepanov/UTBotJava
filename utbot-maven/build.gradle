@@ -1,5 +1,4 @@
 plugins {
-    id 'maven'
     id 'maven-publish'
 }
 
@@ -103,6 +102,6 @@ task generatePluginDescriptor(type: JavaExec, dependsOn: generatePomFile) {
     }
 }
 
-project.install.dependsOn(generatePluginDescriptor)
+//project.install.dependsOn(generatePluginDescriptor)
 
 // Please, use `utbot-maven/other/install` task for publishing

@@ -5,28 +5,28 @@ import com.pholser.junit.quickcheck.generator.GenerationStatus
 import com.pholser.junit.quickcheck.generator.Generator
 import com.pholser.junit.quickcheck.internal.ParameterTypeContext
 import com.pholser.junit.quickcheck.random.SourceOfRandomness
+import org.javaruntype.type.TypeParameter
 import org.javaruntype.type.Types
 import org.utbot.engine.isPublic
 import org.utbot.engine.greyboxfuzzer.util.*
-import org.utbot.engine.rawType
 import ru.vyarus.java.generics.resolver.context.GenericsContext
 import ru.vyarus.java.generics.resolver.context.GenericsInfo
-import ru.vyarus.java.generics.resolver.context.MethodGenericsContext
-import ru.vyarus.java.generics.resolver.util.GenericsResolutionUtils
 import ru.vyarus.java.generics.resolver.util.GenericsUtils
+import ru.vyarus.java.generics.resolver.util.TypeUtils
 import soot.Hierarchy
 import soot.Scene
 import sun.misc.Unsafe
+import sun.reflect.annotation.AnnotatedTypeFactory
+import sun.reflect.annotation.TypeAnnotation
 import sun.reflect.generics.reflectiveObjects.ParameterizedTypeImpl
+import sun.reflect.generics.reflectiveObjects.TypeVariableImpl
 import java.lang.reflect.*
 import kotlin.random.Random
-import kotlin.system.exitProcess
 import ru.vyarus.java.generics.resolver.context.container.ParameterizedTypeImpl as GParameterizedTypeImpl
 
 class UserClassesGenerator : ComponentizedGenerator<Any>(Any::class.java) {
 
     var clazz: Class<*>? = null
-    var parameterType: Type? = null
     var parameterTypeContext: ParameterTypeContext? = null
     var depth = 0
 
@@ -41,14 +41,18 @@ class UserClassesGenerator : ComponentizedGenerator<Any>(Any::class.java) {
     override fun copy(): Generator<Any> {
         return UserClassesGenerator().also {
             it.clazz = clazz
-            it.parameterType = parameterType
             it.depth = depth
             it.parameterTypeContext = parameterTypeContext
         }
     }
 
+    override fun canGenerateForParametersOfTypes(typeParameters: MutableList<TypeParameter<*>>?): Boolean {
+        return true
+    }
+
     override fun numberOfNeededComponents(): Int {
-        return (parameterType as? ParameterizedTypeImpl)?.actualTypeArguments?.size ?: 0
+        return parameterTypeContext?.getResolvedType()?.typeParameters?.size ?: 0
+        //return (parameterType as? ParameterizedTypeImpl)?.actualTypeArguments?.size ?: 0
     }
 
     private fun generateClass(): Class<*> {
@@ -64,14 +68,13 @@ class UserClassesGenerator : ComponentizedGenerator<Any>(Any::class.java) {
         return constructor.newInstance(clazz, actualTypeParameters, null) as ParameterizedTypeImpl
     }
 
-    private fun generateImplementerInstance(random: SourceOfRandomness?, status: GenerationStatus?): Any? {
-        val sootClass = Scene.v().classes.find { it.name == parameterType!!.toClass().name } ?: return null
+    private fun generateImplementerInstance(resolvedType: Type): Any? {
+        val sootClass = Scene.v().classes.find { it.name == parameterTypeContext!!.rawClass.name } ?: return null
         val hierarchy = Hierarchy()
         val implementers =
             sootClass.getImplementersOfWithChain(hierarchy)//Hierarchy().getImplementersOf(sootClass).ifEmpty { return null }
         val randomImplementersChain = implementers?.randomOrNull()?.drop(1) ?: return null
         val generics = mutableListOf<Pair<Type, MutableList<Type>>>()
-        val resolvedType = parameterTypeContext!!.getGenericContext().resolveType(parameterType)
         var prevImplementer = sootClass.toJavaClass()
         (resolvedType as? GParameterizedTypeImpl)?.actualTypeArguments?.forEachIndexed { index, typeVariable ->
             generics.add(typeVariable to mutableListOf(prevImplementer.toClass().typeParameters[index]))
@@ -82,6 +85,8 @@ class UserClassesGenerator : ComponentizedGenerator<Any>(Any::class.java) {
                 .find { it.toClass() == prevImplementer }
             (extendType as? ParameterizedTypeImpl)
             val tp = prevImplementer.typeParameters
+            prevImplementer = javaImplementer
+            if (tp.isEmpty()) continue
             val newTp = (extendType as ParameterizedTypeImpl).actualTypeArguments
             tp.mapIndexed { index, typeVariable -> typeVariable to newTp[index] }
                 .forEach { typeVar ->
@@ -90,7 +95,6 @@ class UserClassesGenerator : ComponentizedGenerator<Any>(Any::class.java) {
                         generics[indexOfTypeParam].second.add(typeVar.second)
                     }
                 }
-            prevImplementer = javaImplementer
         }
         val g = prevImplementer.typeParameters.map { tp -> tp.name to generics.find { it.second.last() == tp }?.first }
             .toMap()
@@ -102,91 +106,42 @@ class UserClassesGenerator : ComponentizedGenerator<Any>(Any::class.java) {
         val genericsContext = GenericsContext(GenericsInfo(prevImplementer, m), prevImplementer)
         return if (Random.nextBoolean()) {
             generateInstanceViaConstructor(prevImplementer, genericsContext, depth + 1)
-                ?: generateInstanceWithStatics(Types.forJavaLangReflectType(parameterizedType), genericsContext, depth + 1)
+                ?: generateInstanceWithStatics(
+                    Types.forJavaLangReflectType(parameterizedType),
+                    genericsContext,
+                    depth + 1
+                )
         } else {
-            generateInstanceWithStatics(Types.forJavaLangReflectType(parameterizedType), genericsContext, depth + 1) ?:
-            generateInstanceViaConstructor(prevImplementer, genericsContext, depth + 1)
+            generateInstanceWithStatics(Types.forJavaLangReflectType(parameterizedType), genericsContext, depth + 1)
+                ?: generateInstanceViaConstructor(prevImplementer, genericsContext, depth + 1)
         }
     }
 
     override fun generate(random: SourceOfRandomness?, status: GenerationStatus?): Any? {
-        parameterType ?: return null
         clazz ?: return null
+        val parameterType = parameterTypeContext!!.getResolvedType()
         println("TRYING TO GENERATE $parameterType depth: $depth")
-        if (parameterType!!.toClass().name == "java.lang.Class") return generateClass()
-        val modifiers = parameterType!!.toClass().modifiers
-        //TODO! generate instances of abstract classes and interfaces
+        if (parameterType.componentClass.name == "java.lang.Class") return generateClass()
+        val modifiers = parameterType.componentClass.modifiers
+        val resolvedJavaType = parameterTypeContext!!.getGenericContext().resolveType(parameterTypeContext!!.type())
         if (modifiers.and(Modifier.ABSTRACT) > 0 || modifiers.and(Modifier.INTERFACE) > 0) {
-            return generateImplementerInstance(random, status)
+            return generateImplementerInstance(resolvedJavaType)
         }
-//        if (parameterType!!.typeName) {
-//
-//        }
-        val resolvedType = parameterTypeContext!!.getGenericContext().resolveType(parameterType)
-        val actualTypeParams = (resolvedType as? GParameterizedTypeImpl)?.actualTypeArguments?.toList() ?: emptyList()
-        val klassTypeParams = resolvedType.toClass().typeParameters.map { it.name }
-        val gm = LinkedHashMap<String, Type>()
-        klassTypeParams.zip(actualTypeParams).forEach { gm[it.first] = it.second }
-//        val genericContext = parameterTypeContext?.getGenericContext()
-//        val genericMap = parameterTypeContext?.getGenericContext()?.genericsMap() as LinkedHashMap
-//
-//        val resolvedGenerics = GenericsResolver.resolve(clazz).resolveGenericOf(parameterType)
-//        exitProcess(0)
-        //GenericsResolver.resolve(clazz).method(method)//GenericsResolutionUtils.resolveGenerics(parameterType, mapOf())
-        val m = mutableMapOf(clazz!! to gm)
-        val genericsInfo = GenericsInfo(clazz, m)
-        val gctx = GenericsContext(genericsInfo, clazz)
+        //TODO!! Implement generation for Inner classes
+        if (TypeUtils.getOuter(resolvedJavaType) != null) return null
+        val gctx = createGenericsContext(resolvedJavaType, clazz!!)
         val inst =
             if (Random.getTrue(50)) {
-                generateInstanceViaConstructor(resolvedType.toClass(), gctx, depth + 1)
-                    ?: generateInstanceWithStatics(Types.forJavaLangReflectType(resolvedType), gctx, depth + 1)
+                generateInstanceViaConstructor(resolvedJavaType.toClass(), gctx, depth + 1)
+                    ?: generateInstanceWithStatics(Types.forJavaLangReflectType(resolvedJavaType), gctx, depth + 1)
             } else {
-                generateInstanceWithStatics(Types.forJavaLangReflectType(resolvedType), gctx, depth + 1)
-                    ?: generateInstanceViaConstructor(resolvedType.toClass(), gctx, depth + 1)
+                generateInstanceWithStatics(Types.forJavaLangReflectType(resolvedJavaType), gctx, depth + 1)
+                    ?: generateInstanceViaConstructor(resolvedJavaType.toClass(), gctx, depth + 1)
             }
+        if (inst == null) {
+            //UNSAFE
+        }
         return inst
-//        repeat(100) {
-//            val instanceByConstructorInvocation = generateInstanceViaConstructor(resolvedType.componentClass, gctx)
-//            println("INSTANCE = $instanceByConstructorInvocation")
-//        }
-//        exitProcess(0)
-//        repeat(100) {
-//            val instanceGeneratedInstanceViaLegalWay =
-//                generateInstanceViaLegalWay(parameterType!!, gctx)
-//            println("INSTANCE = $instanceGeneratedInstanceViaLegalWay")
-//        }
-//        return null
-//        if (/*Random.getTrue(25)* ||*/ depth >= DataGeneratorSettings.maxDepthOfGeneration) {
-//            //generateInstanceViaConstructorInvocation(clazz!!, gctx)?.let { return it }
-//            setAllObjectsToNull = true
-//        }
-//        val i = generateInstanceViaConstructorInvocation(clazz!!, gctx)
-//        println("INTANCE = $i")
-//        exitProcess(0)
-//        val fieldValues = clazz!!.getAllDeclaredFields().map { field ->
-//            println("F = $field ${field.name}")
-//            val fieldValue =
-//                if (Modifier.STATIC.and(field.modifiers) > 0 && Modifier.FINAL.and(field.modifiers) > 0) {
-//                    field.getFieldValue(null)
-//                } else {
-//                    generateFieldValue(field, gctx, setAllObjectsToNull)
-//                }
-//            field to fieldValue
-//        }
-//        println("TRYING TO ALLOCATE INSTANCE OF $clazz")
-//        val instance = UNSAFE.allocateInstance(clazz)
-//        fieldValues.forEach { (field, value) ->
-//            field.generateInstance(instance, value)
-//        }
-//        return instance
-    }
-
-    private fun MethodGenericsContext.resolveRetTypeForParameterizedType(gctx: GenericsContext): GParameterizedTypeImpl {
-        val retType = gctx.method(this.currentMethod()).resolveReturnType()
-        return ru.vyarus.java.generics.resolver.context.container.ParameterizedTypeImpl(
-            retType.rawType.toClass().rawType,
-            *(parameterType as ParameterizedTypeImpl).actualTypeArguments
-        )
     }
 
     private fun generateInstanceWithStatics(
@@ -194,18 +149,9 @@ class UserClassesGenerator : ComponentizedGenerator<Any>(Any::class.java) {
         gctx: GenericsContext,
         depth: Int
     ): Any? {
-        //println("VIA STATIC FIELD")
+        println("VIA STATIC FIELD")
         if (depth > DataGeneratorSettings.maxDepthOfGeneration) return null
         //TODO filter not suitable methods with generics with bad bounds
-//        val m = resolvedType.componentClass.declaredMethods.filter { it.hasModifiers(Modifier.STATIC, Modifier.PUBLIC) }.first()
-//        val me = gctx.method(m)
-//        val resolvedReturnType = (me.resolveReturnType() as ru.vyarus.java.generics.resolver.context.container.ParameterizedTypeImpl)
-//        resolvedType.typeParameters.first().type.
-//        val m = this.currentMethod()
-//        val generics = gctx.genericsMap()
-//        GenericsUtils.resolveTypeVariables(m.parameters.first().parameterizedType, generics)
-////GenericsResolutionUtils.resolveRawGeneric()
-
         println()
         //TODO make it work for subtypes
         val resolvedStaticMethods =
@@ -243,6 +189,10 @@ class UserClassesGenerator : ComponentizedGenerator<Any>(Any::class.java) {
                     fieldOrMethodToProvideInstance.invoke(null, *parameterValues.toTypedArray())
                 } catch (e: InvocationTargetException) {
                     return null
+                } catch (e: Exception) {
+                    return null
+                } catch (e: Error) {
+                    return null
                 }
             }
             else -> return null
@@ -255,6 +205,7 @@ class UserClassesGenerator : ComponentizedGenerator<Any>(Any::class.java) {
         gctx: GenericsContext,
         resolvedType: org.javaruntype.type.Type<*>
     ): List<Any?> {
+        val parameterType = parameterTypeContext!!.getGenericContext().resolveType(parameterTypeContext!!.type())
         val generics = LinkedHashMap<String, Type>()
         (method.genericReturnType as? ParameterizedTypeImpl)?.actualTypeArguments?.forEachIndexed { index, typeVariable ->
             generics[typeVariable.typeName] = (parameterType as ParameterizedTypeImpl).actualTypeArguments[index]
@@ -272,28 +223,41 @@ class UserClassesGenerator : ComponentizedGenerator<Any>(Any::class.java) {
     }
 
     private fun generateInstanceViaConstructor(clazz: Class<*>, gctx: GenericsContext, depth: Int): Any? {
-        //println("VIA CONSTRUCTOR INVOCATION")
-        val randomPublicConstructor = clazz.declaredConstructors.filter { it.isPublic }.randomOrNull()
+        val randomPublicConstructor =
+            clazz.declaredConstructors
+                .filter {
+                    it.isPublic || !it.hasAtLeastOneOfModifiers(
+                        Modifier.PROTECTED,
+                        Modifier.PRIVATE
+                    )
+                }
+                .randomOrNull()
         val randomConstructor = clazz.declaredConstructors.randomOrNull()
         val constructor = if (Random.getTrue(75)) randomPublicConstructor ?: randomConstructor else randomConstructor
         constructor ?: return null
-        //println("CONSTRUCTOR = $constructor")
-        val oldAccessibleFlag = constructor.isAccessible
         constructor.isAccessible = true
-        val setAllObjectsToNull = depth >= DataGeneratorSettings.maxDepthOfGeneration
-        val parameterValues =
-            constructor.parameters.map { parameter ->
-                //val parameterType = gctx.resolveType(parameter.parameterizedType)
-                val parameterValue = generateParameterValue(parameter, clazz.name, gctx, setAllObjectsToNull)
-                //println("DEPTH = $depth VALUE OF PARAM $parameterType is $parameterValue")
-                parameterValue
+        val resolvedConstructor = gctx.constructor(constructor)
+        val parameterValues = constructor.parameters.withIndex().map { indexedParameter ->
+            val parameterContext =
+                createParameterContextForParameter(indexedParameter.value, indexedParameter.index, resolvedConstructor)
+            val type = parameterContext.type()
+            var className = ""
+            if (type is TypeVariableImpl<*> || type is ParameterizedTypeImpl) {
+                className = parameterContext.getResolvedType().toString()
             }
+            val generator = DataGeneratorSettings.generatorRepository.getOrProduceGenerator(
+                parameterContext,
+                depth + 1,
+                className
+            )!!
+            generator.generate(DataGeneratorSettings.sourceOfRandomness, DataGeneratorSettings.genStatus)
+        }
+        //println("PARAMETERS = $parameterValues")
         return try {
             constructor.newInstance(*parameterValues.toTypedArray())
-                .also { constructor.isAccessible = oldAccessibleFlag }
-        } catch (e: java.lang.IllegalArgumentException) {
+        } catch (e: Exception) {
             null
-        } catch (e: InvocationTargetException) {
+        } catch (e: Error) {
             null
         }
     }
@@ -308,7 +272,8 @@ class UserClassesGenerator : ComponentizedGenerator<Any>(Any::class.java) {
         generateValueOfType(
             parameter,
             gctx,
-            parameter.declaringExecutable.let { it.declaringClass.name + '.' + it.name },
+            parameter.name,
+            //parameter.declaringExecutable.let { it.declaringClass.name + '.' + it.name },
             parameter.annotatedType,
             clazzName,
             ParameterTypeContext.forParameter(parameter),
@@ -337,6 +302,9 @@ class UserClassesGenerator : ComponentizedGenerator<Any>(Any::class.java) {
         setAllObjectsToNull: Boolean,
         resolvedType: Type? = null
     ): Any? {
+        //TODO!!!!!!! Make it work for inner classes
+        if (fieldOrParameterForGeneration.toString().contains("$")) return null
+
         var clazz: Class<*>?
         val context =
             try {
@@ -353,7 +321,14 @@ class UserClassesGenerator : ComponentizedGenerator<Any>(Any::class.java) {
                 }
                 createParameterTypeContext(
                     name,
-                    annotatedType,
+                    AnnotatedTypeFactory.buildAnnotatedType(
+                        finallyResolvedType,
+                        TypeAnnotation.LocationInfo.BASE_LOCATION,
+                        arrayOf(),
+                        arrayOf(),
+                        null
+                    ),
+                    //annotatedType,
                     declaringTypeName,
                     Types.forJavaLangReflectType(finallyResolvedType),
                     gctx
@@ -367,71 +342,6 @@ class UserClassesGenerator : ComponentizedGenerator<Any>(Any::class.java) {
 
         val generator = DataGeneratorSettings.generatorRepository.getOrProduceGenerator(context, depth + 1)
         //generator.generate(DataGeneratorSettings.sourceOfRandomness, DataGeneratorSettings.genStatus)
-        val fieldValue = generator?.generate(DataGeneratorSettings.sourceOfRandomness, DataGeneratorSettings.genStatus)
-        return fieldValue
-    }
-
-
-    private fun createParameterTypeContext(
-        parameterName: String,
-        parameterType: AnnotatedType,
-        declarerName: String,
-        resolvedType: org.javaruntype.type.Type<*>,
-        generics: GenericsContext
-    ): ParameterTypeContext {
-        val constructor = ParameterTypeContext::class.java.declaredConstructors.minByOrNull { it.parameters.size }!!
-        constructor.isAccessible = true
-        return constructor.newInstance(
-            parameterName,
-            parameterType,
-            declarerName,
-            resolvedType,
-            generics
-        ) as ParameterTypeContext
+        return generator?.generate(DataGeneratorSettings.sourceOfRandomness, DataGeneratorSettings.genStatus)
     }
 }
-
-
-//class UserClassesGenerator<T> : ComponentizedGenerator<T>(T::class.java) {
-//
-//    companion object {
-//        val UNSAFE = run {
-//            val field = Unsafe::class.java.getDeclaredField("theUnsafe")
-//            field.isAccessible = true
-//            field.get(null) as Unsafe
-//        }
-//    }
-//
-//    override fun generate(random: SourceOfRandomness, status: GenerationStatus): T {
-////        val subffields = mutableListOf<FField>()
-////        val generator = DataGenerator(generatorRepository)
-////        val fieldValues = clazz.getAllDeclaredFields().map { field ->
-////            val fieldValue = generator.generate(field, random, status)
-////            subffields.add(fieldValue!!)
-////            field to fieldValue.value
-////        }
-////        val instance = UNSAFE.allocateInstance(clazz)
-////        fieldValues.forEach { (field, value) ->
-////            field.generateInstance(instance, value)
-////        }
-//        return null as T;
-//    }
-////    override fun generate(random: SourceOfRandomness, status: GenerationStatus): FField {
-////        val subffields = mutableListOf<FField>()
-////        val generator = DataGenerator(generatorRepository)
-////        val fieldValues = clazz.getAllDeclaredFields().map { field ->
-////            val fieldValue = generator.generate(field, random, status)
-////            subffields.add(fieldValue!!)
-////            field to fieldValue.value
-////        }
-////        val instance = UNSAFE.allocateInstance(clazz)
-////        fieldValues.forEach { (field, value) ->
-////            field.generateInstance(instance, value)
-////        }
-////        return FField(clazz, instance, this, classIdForType(clazz), subffields, false)
-////    }
-//
-//}
-
-
-

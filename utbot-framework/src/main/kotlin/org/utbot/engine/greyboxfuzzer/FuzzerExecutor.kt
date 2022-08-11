@@ -3,9 +3,11 @@ package org.utbot.engine.greyboxfuzzer
 import org.jgrapht.graph.SimpleDirectedGraph
 import org.utbot.common.FileUtil
 import org.utbot.example.GraphAlgorithms
+import org.utbot.example.JpegReaderTest
 import org.utbot.example.PrimitiveFields
 import org.utbot.example.algorithms.ArraysQuickSort
 import org.utbot.example.algorithms.BinarySearch
+import org.utbot.example.casts.GenericCastExample
 import org.utbot.example.codegen.deepequals.DeepEqualsTestingClass
 import org.utbot.example.jdk.SetsTest
 import org.utbot.example.mixed.Simplifier
@@ -146,15 +148,16 @@ fun fields(
 
 @OptIn(ExperimentalPathApi::class)
 fun main() {
-    val cl = Files.walk(Paths.get("utbot-framework/src/main/java/org/utbot/example/")).toList()
-        .filter { it!!.name.endsWith(".java") }
-        .map { it.toFile().absolutePath.substringAfterLast("java/").replace('/', '.').substringBeforeLast(".java") }
-        .map { Class.forName(it) }
-    //114!!
-    var i = 0
-    FuzzerExecutor().testSimpleFuzzing(GraphAlgorithms::class.java, "testFunc3")
+//    val cl = Files.walk(Paths.get("utbot-framework/src/main/java/org/utbot/example/")).toList()
+//        .filter { it!!.name.endsWith(".java") }
+//        .map { it.toFile().absolutePath.substringAfterLast("java/").replace('/', '.').substringBeforeLast(".java") }
+//        .map { Class.forName(it) }
+////    //114!!
+//    var i = 0
 //    for (c in cl) {
 //        ++i
+//        //if (c.name != "org.utbot.example.casts.GenericCastExample") continue
+//        //if (i < 169) continue
 //        val methods = c.declaredMethods.filter { it.parameters.isNotEmpty() }.filter { !it.name.contains('$') }
 //        for (m in methods) {
 //            println("$i CLASS = ${c.name} from ${cl.size} method = ${m.name}")
@@ -166,9 +169,8 @@ fun main() {
 //        }
 //    }
 
-//    //TODO BUG!!
-//    repeat(100) {
-//        FuzzerExecutor().testSimpleFuzzing(Gra::class.java, "returnQuadrilateralFromNode")
-//    }
+    repeat(1) {
+        FuzzerExecutor().testSimpleFuzzing(GraphAlgorithms::class.java, "testFunc3")
+    }
     //FuzzerExecutor().testSimpleFuzzing(DateFormatterTest::class.java, "testLocalDateTimeSerialization")
 }

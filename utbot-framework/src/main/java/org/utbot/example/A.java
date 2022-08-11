@@ -2,16 +2,25 @@ package org.utbot.example;
 
 import java.util.ArrayList;
 
-public class A<T> {
+public class A<R> {
+
+    public class Lil {
+        int a = 1;
+
+        Lil(int a) {
+            this.a = a;
+        }
+    }
+
     int a = 1;
     final int b = 1;
     static int c = 2;
     int d;
-    T e;
-    B<T> bInstance;
+    R e;
+    B<R> bInstance;
 
-    public static <T, E> A<E> getInstance1(T a, ArrayList<Integer> arr, Class<? extends T> cl) {
-        return new A<E>(1, null, null);
+    public static <T, E> A<E> getInstance1(E a, ArrayList<Integer> arr, Class<? extends T> cl) {
+        return new A<E>(1, null, null, null);
     }
 
 
@@ -31,7 +40,7 @@ public class A<T> {
 //    }
 
     //    private A() {}
-    public A(int a, T e, B<T> bInstance) {
+    public A(int a, R ba, R e, B<R> bInstance) {
         this.e = e;
         this.a = a;
         this.bInstance = bInstance;

@@ -28,4 +28,16 @@ public class ClassWithGenerics<T, R extends Comparable<R>> {
             return genericArray;
         }
     }
+
+    class InnerClassWithGeneric1<R> {
+        private final T[] genericArray;
+
+        public InnerClassWithGeneric1(T[] genericArray) {
+            this.genericArray = genericArray;
+        }
+
+        public T[] getGenericArray() {
+            return genericArray;
+        }
+    }
 }

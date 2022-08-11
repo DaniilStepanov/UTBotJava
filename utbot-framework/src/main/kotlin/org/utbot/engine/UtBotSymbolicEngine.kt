@@ -3617,7 +3617,7 @@ class UtBotSymbolicEngine(
                     stateBefore,
                     instrumentation
                 )
-
+                logger.debug("Coverage: ${concreteExecutionResult.coverage.coveredInstructions.size}")
                 workaround(REMOVE_ANONYMOUS_CLASSES) {
                     concreteExecutionResult.result.onSuccess {
                         if (it.classId.isAnonymous) {

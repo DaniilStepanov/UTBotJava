@@ -42,6 +42,8 @@ import kotlin.reflect.KCallable
 import kotlin.reflect.KClass
 import kotlin.reflect.jvm.kotlinFunction
 import mu.KotlinLogging
+import org.utbot.engine.displayName
+import org.utbot.engine.greyboxfuzzer.util.CustomClassLoader
 
 private const val LONG_GENERATION_TIMEOUT = 1_200_000L
 
@@ -159,8 +161,9 @@ abstract class GenerateTestsAbstractCommand(name: String, help: String) :
         sourceCodeFile: Path? = null,
         searchDirectory: Path,
         chosenClassesToMockAlways: Set<ClassId>
-    ): List<UtTestCase> =
-        UtBotTestCaseGenerator.generateForSeveralMethods(
+    ): List<UtTestCase> {
+        CustomClassLoader.classLoader = classLoader
+        return UtBotTestCaseGenerator.generateForSeveralMethods(
             targetMethods,
             mockStrategy,
             chosenClassesToMockAlways,
@@ -168,6 +171,7 @@ abstract class GenerateTestsAbstractCommand(name: String, help: String) :
         ).map {
             if (sourceCodeFile != null) it.summarize(sourceCodeFile.toFile(), searchDirectory) else it
         }
+    }
 
 
     protected fun withLogger(targetClassFqn: String, block: Runnable) {

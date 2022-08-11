@@ -1,6 +1,7 @@
 package org.utbot.example;
 
 import java.util.*;
+import java.util.concurrent.ThreadPoolExecutor;
 
 public class GraphAlgorithms<T extends Number> {
     public static boolean bfs(Graph graph, int startNodeNumber, int goalNodeNumber) {
@@ -48,7 +49,7 @@ public class GraphAlgorithms<T extends Number> {
         return false;
     }
 
-    public boolean testFunc3(ArrayList<H> a) {
+    public boolean testFunc3(java.util.concurrent.BlockingQueue<java.lang.Runnable> a) {
 //        for (int i = 0; i < array.size() - 1; i++) {
 //            if (array.get(i).a > array.get(i + 1).a) {
 //                return true;
@@ -56,6 +57,14 @@ public class GraphAlgorithms<T extends Number> {
 //        }
         return false;
     }
+//    public boolean testFunc3(java.util.concurrent.BlockingQueue<java.lang.Runnable> a) {
+//        for (int i = 0; i < array.size() - 1; i++) {
+//            if (array.get(i).a > array.get(i + 1).a) {
+//                return true;
+//            }
+//        }
+//        return false;
+//    }
 
 //    public boolean testFunc3(A<Integer> a) {
 ////        for (int i = 0; i < array.size() - 1; i++) {

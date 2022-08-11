@@ -92,7 +92,7 @@ object UtBotTestCaseGenerator : TestCaseGenerator {
         }
 
         timeoutLogger.trace().bracket("Soot initialization") {
-            //runSoot(buildDir, classpath)
+            runSoot(buildDir, classpath)
         }
 
         previousBuildDir = buildDir
