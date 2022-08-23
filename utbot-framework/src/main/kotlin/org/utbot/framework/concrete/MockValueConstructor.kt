@@ -1,50 +1,20 @@
 package org.utbot.framework.concrete
 
+import mu.KotlinLogging
+import org.mockito.Mockito
+import org.mockito.stubbing.Answer
+import org.objectweb.asm.Type
 import org.utbot.common.findField
 import org.utbot.common.findFieldOrNull
 import org.utbot.common.invokeCatching
-import org.utbot.framework.plugin.api.ClassId
-import org.utbot.framework.plugin.api.ConstructorId
-import org.utbot.framework.plugin.api.ExecutableId
-import org.utbot.framework.plugin.api.FieldId
-import org.utbot.framework.plugin.api.FieldMockTarget
-import org.utbot.framework.plugin.api.MethodId
-import org.utbot.framework.plugin.api.MockId
-import org.utbot.framework.plugin.api.MockInfo
-import org.utbot.framework.plugin.api.MockTarget
-import org.utbot.framework.plugin.api.ObjectMockTarget
-import org.utbot.framework.plugin.api.ParameterMockTarget
-import org.utbot.framework.plugin.api.UtArrayModel
-import org.utbot.framework.plugin.api.UtAssembleModel
-import org.utbot.framework.plugin.api.UtClassRefModel
-import org.utbot.framework.plugin.api.UtCompositeModel
-import org.utbot.framework.plugin.api.UtConcreteValue
-import org.utbot.framework.plugin.api.UtDirectSetFieldModel
-import org.utbot.framework.plugin.api.UtEnumConstantModel
-import org.utbot.framework.plugin.api.UtExecutableCallModel
-import org.utbot.framework.plugin.api.UtMockValue
-import org.utbot.framework.plugin.api.UtModel
-import org.utbot.framework.plugin.api.UtNewInstanceInstrumentation
-import org.utbot.framework.plugin.api.UtNullModel
-import org.utbot.framework.plugin.api.UtPrimitiveModel
-import org.utbot.framework.plugin.api.UtReferenceModel
-import org.utbot.framework.plugin.api.UtStaticMethodInstrumentation
-import org.utbot.framework.plugin.api.UtVoidModel
-import org.utbot.framework.plugin.api.isMockModel
-import org.utbot.framework.plugin.api.util.constructor
-import org.utbot.framework.plugin.api.util.executableId
-import org.utbot.framework.plugin.api.util.jClass
-import org.utbot.framework.plugin.api.util.method
-import org.utbot.framework.plugin.api.util.utContext
+import org.utbot.framework.plugin.api.*
+import org.utbot.framework.plugin.api.util.*
 import org.utbot.framework.util.anyInstance
 import java.io.Closeable
 import java.lang.reflect.Field
 import java.lang.reflect.Modifier
-import java.util.IdentityHashMap
+import java.util.*
 import kotlin.reflect.KClass
-import org.mockito.Mockito
-import org.mockito.stubbing.Answer
-import org.objectweb.asm.Type
 
 /**
  * Constructs values (including mocks) from models.
@@ -137,7 +107,6 @@ class MockValueConstructor(
      */
     private fun constructObject(model: UtCompositeModel): Any {
         constructedObjects[model]?.let { return it }
-
         this.mockTarget?.let { mockTarget ->
             model.mocks.forEach { (methodId, models) ->
                 mockInfo += MockInfo(mockTarget, methodId, models.map { model ->
@@ -171,18 +140,26 @@ class MockValueConstructor(
         model.fields.forEach { (field, fieldModel) ->
             val declaredField =
                 javaClass.findFieldOrNull(field.name) ?: error("Can't find field: $field for $javaClass")
+            //error("FIELD NAME = ${declaredField.name} CLASS = ${javaClass.name}")
             val accessible = declaredField.isAccessible
             declaredField.isAccessible = true
 
             val modifiersField = Field::class.java.getDeclaredField("modifiers")
             modifiersField.isAccessible = true
+            //modifiersField.setInt(field, field.getModifiers() and Modifier.FINAL.inv())
+            modifiersField.setInt(declaredField, declaredField.modifiers and Modifier.FINAL.inv())
 
             val target = mockTarget(fieldModel) {
                 FieldMockTarget(fieldModel.classId.name, model.classId.name, UtConcreteValue(classInstance), field.name)
             }
             val value = construct(fieldModel, target).value
             val instance = if (Modifier.isStatic(declaredField.modifiers)) null else classInstance
-            declaredField.set(instance, value)
+            try {
+                declaredField.set(instance, value)
+            } catch (e: IllegalArgumentException) {
+                declaredField.set(instance, null)
+                //error("CLASS NAME = ${javaClass.name} MODEL = ${model.classId} $instance $value ${declaredField.type}")
+            }
             declaredField.isAccessible = accessible
         }
 

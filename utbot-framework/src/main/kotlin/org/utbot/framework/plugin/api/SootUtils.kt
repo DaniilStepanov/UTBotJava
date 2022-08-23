@@ -3,41 +3,25 @@ package org.utbot.framework.plugin.api
 import org.utbot.api.mock.UtMock
 import org.utbot.common.FileUtil
 import org.utbot.engine.UtNativeStringWrapper
+import org.utbot.engine.overrides.*
 import org.utbot.engine.overrides.Boolean
 import org.utbot.engine.overrides.Byte
-import org.utbot.engine.overrides.Character
-import org.utbot.engine.overrides.Class
-import org.utbot.engine.overrides.Integer
 import org.utbot.engine.overrides.Long
-import org.utbot.engine.overrides.PrintStream
 import org.utbot.engine.overrides.Short
-import org.utbot.engine.overrides.System
-import org.utbot.engine.overrides.UtArrayMock
-import org.utbot.engine.overrides.UtLogicMock
+import org.utbot.engine.overrides.collections.*
 import org.utbot.engine.overrides.strings.UtString
 import org.utbot.engine.overrides.strings.UtStringBuffer
 import org.utbot.engine.overrides.strings.UtStringBuilder
-import org.utbot.engine.overrides.collections.AssociativeArray
-import org.utbot.engine.overrides.collections.RangeModifiableUnlimitedArray
-import org.utbot.engine.overrides.collections.UtArrayList
-import org.utbot.engine.overrides.collections.UtGenericAssociative
-import org.utbot.engine.overrides.collections.UtHashMap
-import org.utbot.engine.overrides.collections.UtHashSet
-import org.utbot.engine.overrides.collections.UtLinkedList
-import org.utbot.engine.overrides.UtOverrideMock
-import org.utbot.engine.overrides.collections.UtGenericStorage
-import org.utbot.engine.overrides.collections.UtOptional
-import org.utbot.engine.overrides.collections.UtOptionalDouble
-import org.utbot.engine.overrides.collections.UtOptionalInt
-import org.utbot.engine.overrides.collections.UtOptionalLong
-import java.io.File
-import java.nio.file.Path
-import kotlin.reflect.KClass
 import soot.G
 import soot.PackManager
 import soot.Scene
 import soot.SootClass
 import soot.options.Options
+import java.io.File
+import java.nio.file.Path
+import java.util.jar.JarInputStream
+import java.util.zip.ZipEntry
+import kotlin.reflect.KClass
 
 /**
 Convert code to Jimple
@@ -45,7 +29,6 @@ Convert code to Jimple
 fun runSoot(buildDir: Path, classpath: String?) {
     G.reset()
     val options = Options.v()
-
     options.apply {
         set_prepend_classpath(true)
         // set true to debug. Disabled because of a bug when two different variables
@@ -57,6 +40,8 @@ fun runSoot(buildDir: Path, classpath: String?) {
         )
         set_src_prec(Options.src_prec_only_class)
         set_process_dir(listOf("$buildDir"))
+        //val classPathAsList = classpath?.split(":") ?: emptyList()
+        //set_process_dir((classPathAsList + listOf("$buildDir")).toSet().toList())
         set_keep_line_number(true)
         set_ignore_classpath_errors(true) // gradle/build/resources/main does not exists, but it's not a problem
         set_output_format(Options.output_format_jimple)
@@ -70,6 +55,7 @@ fun runSoot(buildDir: Path, classpath: String?) {
     }
 
     addBasicClasses(*classesToLoad)
+    loadJavaStdLibClasses()
 
     Scene.v().loadNecessaryClasses()
     PackManager.v().runPacks()
@@ -83,6 +69,28 @@ fun runSoot(buildDir: Path, classpath: String?) {
 private fun addBasicClasses(vararg classes: KClass<*>) {
     classes.forEach {
         Scene.v().addBasicClass(it.qualifiedName, SootClass.BODIES)
+    }
+}
+
+private fun loadJavaStdLibClasses() {
+    val libraryClasses = mutableListOf<String>()
+    val jars = File("/usr/lib/jvm/java-8-openjdk/jre/lib/").listFiles()
+        .toList()
+        .filter { it.path.endsWith(".jar") }
+    for (jar in jars) {
+        val inputStream = JarInputStream(jar.inputStream())
+        var entry = inputStream.nextEntry
+        while (entry != null) {
+            if (!entry.isDirectory && entry.name.endsWith(".class")) {
+                // This ZipEntry represents a class. Now, what class does it represent?
+                val className: String = entry.name.replace('/', '.') // including ".class"
+                libraryClasses.add(className)
+            }
+            entry = inputStream.nextEntry
+        }
+    }
+    libraryClasses.forEach {
+        Scene.v().addBasicClass(it, SootClass.BODIES)
     }
 }
 

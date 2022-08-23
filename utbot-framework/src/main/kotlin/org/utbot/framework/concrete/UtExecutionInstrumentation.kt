@@ -39,6 +39,7 @@ import org.utbot.instrumentation.instrumentation.et.TraceHandler
 import org.utbot.instrumentation.instrumentation.instrumenter.Instrumenter
 import org.utbot.instrumentation.instrumentation.mock.MockClassVisitor
 import java.security.ProtectionDomain
+import java.time.LocalDateTime
 import java.util.IdentityHashMap
 import kotlin.reflect.jvm.javaMethod
 

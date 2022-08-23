@@ -1,6 +1,5 @@
 package org.utbot.engine.greyboxfuzzer.util
 
-import org.utbot.engine.rawType
 import org.utbot.framework.codegen.model.constructor.tree.isStatic
 import sun.reflect.generics.reflectiveObjects.GenericArrayTypeImpl
 import sun.reflect.generics.reflectiveObjects.ParameterizedTypeImpl
@@ -10,6 +9,7 @@ import java.lang.reflect.Field
 import java.lang.reflect.Method
 import java.lang.reflect.Modifier
 import java.lang.reflect.Type
+import kotlin.random.Random
 
 fun Class<*>.getAllDeclaredFields(): List<Field> {
     val res = mutableListOf<Field>()
@@ -100,12 +100,16 @@ fun Field.setFieldValue(instance: Any?, fieldValue: Any?) {
     }.also { this.isAccessible = oldAccessibleFlag }
 }
 
-fun Type.toClass(): Class<*> =
-    when (this) {
-        is ParameterizedTypeImpl -> this.rawType
-        is ru.vyarus.java.generics.resolver.context.container.ParameterizedTypeImpl -> this.rawType.toClass()
-        is GenericArrayTypeImpl -> this.genericComponentType.toClass()
-        else -> this as Class<*>
+fun Type.toClass(): Class<*>? =
+    try {
+        when (this) {
+            is ParameterizedTypeImpl -> this.rawType
+            is ru.vyarus.java.generics.resolver.context.container.ParameterizedTypeImpl -> this.rawType.toClass()
+            is GenericArrayTypeImpl -> this.genericComponentType.toClass()
+            else -> this as Class<*>
+        }
+    } catch (e: Exception) {
+        null
     }
 
 fun Field.generateInstance(instance: Any, generatedValue: Any?) {
@@ -152,6 +156,8 @@ var Field.isFinal: Boolean
         modifiersField.setInt(this, this.modifiers and if (value) Modifier.FINAL else Modifier.FINAL.inv())
     }
 
+fun Method.isStatic() = modifiers.and(Modifier.STATIC) > 0
+fun Field.isStatic() = modifiers.and(Modifier.STATIC) > 0
 fun Method.hasModifiers(vararg modifiers: Int) = modifiers.all { it.and(this.modifiers) > 0 }
 fun Field.hasModifiers(vararg modifiers: Int) = modifiers.all { it.and(this.modifiers) > 0 }
 fun Class<*>.hasModifiers(vararg modifiers: Int) = modifiers.all { it.and(this.modifiers) > 0 }
@@ -165,4 +171,23 @@ fun ru.vyarus.java.generics.resolver.context.container.ParameterizedTypeImpl.get
         it.isAccessible = true
         it.get(this) as Array<Type>
     }.also { args.isAccessible = false }
+}
+
+fun List<Constructor<*>>.chooseRandomConstructor() =
+    if (Random.getTrue(75)) {
+        this.shuffled().minByOrNull { it.parameterCount }
+    } else this.randomOrNull()
+
+fun List<Method>.chooseRandomMethodToGenerateInstance() =
+    if (Random.getTrue(75)) {
+        this.shuffled().minByOrNull { it.parameterCount }
+    } else this.randomOrNull()
+
+fun generateParameterizedTypeImpl(
+    clazz: Class<*>,
+    actualTypeParameters: Array<Type>
+): ParameterizedTypeImpl {
+    val constructor = ParameterizedTypeImpl::class.java.declaredConstructors.first()
+    constructor.isAccessible = true
+    return constructor.newInstance(clazz, actualTypeParameters, null) as ParameterizedTypeImpl
 }

@@ -4,13 +4,16 @@ import com.pholser.junit.quickcheck.random.SourceOfRandomness
 import edu.berkeley.cs.jqf.fuzz.ei.ZestGuidance
 import org.utbot.engine.executeConcretely
 import org.utbot.engine.greyboxfuzzer.generator.*
+import org.utbot.engine.greyboxfuzzer.util.CoverageCollector
 import org.utbot.external.api.classIdForType
 import org.utbot.framework.concrete.UtConcreteExecutionResult
 import org.utbot.framework.concrete.UtExecutionInstrumentation
 import org.utbot.framework.concrete.UtModelConstructor
 import org.utbot.framework.plugin.api.*
 import org.utbot.framework.plugin.api.util.id
+import org.utbot.framework.plugin.api.util.utContext
 import org.utbot.instrumentation.ConcreteExecutor
+import soot.Scene
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.ObjectInputStream
@@ -18,6 +21,7 @@ import java.io.ObjectOutputStream
 import java.util.*
 import kotlin.reflect.KFunction
 import kotlin.reflect.jvm.javaMethod
+import kotlin.reflect.jvm.jvmName
 import kotlin.system.exitProcess
 
 class ZestFuzzer(
@@ -40,32 +44,61 @@ class ZestFuzzer(
     suspend fun fuzz(): Sequence<List<UtModel>> {
         val kfunction = methodUnderTest.callable as KFunction<*>
         val method = kfunction.javaMethod!!
+        //TODO!! DO NOT FORGET TO REMOVE IT
+        //if (method.name != "createArrayReference") return sequenceOf()
+        val cl = Scene.v().classes.find { it.name == methodUnderTest.clazz.jvmName }!!
+        val sootMethod =
+            cl.methods.find { it.name == method.name && it.parameterCount == method.parameterCount && it.modifiers == method.modifiers }
+        val numberOfLinesInMethod =
+            sootMethod!!.activeBody.units.map { it.javaSourceStartLineNumber }.toSet().size
+        println(sootMethod)
         var maxCoverage = 0
-        repeat(1) {
+        var repeatTimes = 10
+        repeat(repeatTimes) {
             println("EXECUTION NUMBER $it")
-            val generatedParameters = method.parameters.map { parameter ->
-                DataGenerator.generate(
-                    parameter,
-                    DataGeneratorSettings.sourceOfRandomness,
-                    DataGeneratorSettings.genStatus
-                )
-            }
-            if (generatedParameters.any { it == null }) return@repeat
+            val generatedParameters =
+                method.parameters.mapIndexed { index, parameter ->
+                    DataGenerator.generate(
+                        parameter,
+                        index,
+                        DataGeneratorSettings.sourceOfRandomness,
+                        DataGeneratorSettings.genStatus
+                    ) to classIdForType(parameter.type)
+                }
+
+            //println("GENERATED PARAMETERS = $generatedParameters")
             //println("GENERATED PARAMS = $generatedParameters")
 //            val generatedParameterAsUtModel = generatedParameters.map { UtPrimitiveModel(it!!.value) }
             //public void testLocalDateTimeSerialization(int year, int month, int dayOfMonth, int hour, int minute, int second) {
             val generatedParameterAsUtModel = generatedParameters.map {
-                UtModelConstructor(IdentityHashMap()).construct(it!!.value, classIdForType(it.value::class.java))
+                if (it.first == null) {
+                    UtNullModel(it.second)
+                } else {
+                    try {
+                        UtModelConstructor(IdentityHashMap()).construct(it.first!!.value, it.second)
+                    } catch (e: Exception) {
+                        UtNullModel(it.second)
+                    }
+                }
             }
             val initialEnvironmentModels = EnvironmentModels(thisInstance, generatedParameterAsUtModel, mapOf())
-            println("EXECUTING FUNCTION")
+            println("EXECUTING FUNCTION ${method.name}")
             try {
+                val executor =
+                    ConcreteExecutor(
+                        UtExecutionInstrumentation,
+                        concreteExecutor.pathsToUserClasses,
+                        concreteExecutor.pathsToDependencyClasses
+                    ).apply { this.classLoader = utContext.classLoader }
                 val executionResult =
-                    concreteExecutor.executeConcretely(methodUnderTest, initialEnvironmentModels, listOf())
+                    executor.executeConcretely(methodUnderTest, initialEnvironmentModels, listOf())
                 println("EXEC RES = ${executionResult.result}")
-                println("COVERAGE = ${executionResult.coverage.coveredInstructions.size}")
-                if (executionResult.coverage.coveredInstructions.size > maxCoverage) {
-                    maxCoverage = executionResult.coverage.coveredInstructions.size
+                val coveredLines = executionResult.coverage.coveredInstructions.map { it.lineNumber }.toSet()
+                executionResult.coverage.coveredInstructions.forEach { CoverageCollector.coverage.add(it) }
+                println("COVERAGE = ${coveredLines.size} $coveredLines")
+                println("COVERED LINES ${coveredLines.size} from $numberOfLinesInMethod ${coveredLines.size / numberOfLinesInMethod.toDouble() * 100.0}")
+                if (coveredLines.size > maxCoverage) {
+                    maxCoverage = coveredLines.size
                 }
             } catch (e: Error) {
                 println("Error :(")

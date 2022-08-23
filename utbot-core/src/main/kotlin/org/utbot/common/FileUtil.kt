@@ -92,7 +92,10 @@ object FileUtil {
 
         for (clazz in classes) {
             val path = clazz.toClassFilePath()
-            val resource = clazz.java.classLoader.getResource(path) ?: error("No such file: $path")
+            val resource =
+                clazz.java?.classLoader?.getResource(path)
+                    ?: ClassLoader.getSystemClassLoader().getResource(path)
+                    ?: error("No such file: $path")
 
             if (resource.toURI().scheme == "jar") {
                 val jarLocation = resource.toURI().extractJarName()
@@ -165,8 +168,8 @@ object FileUtil {
         private fun runCleanOldTemp(currentTime: Long) {
             tempDirectoryPath.toPath().toFile().listFiles { file ->
                 file.isDirectory &&
-                file.name.startsWith(TEMP_DIR_NAME) &&
-                (currentTime - file.lastModified()) > maxDeltaTime
+                        file.name.startsWith(TEMP_DIR_NAME) &&
+                        (currentTime - file.lastModified()) > maxDeltaTime
             }?.forEach { dir ->
                 logger.info("Start deleting old directory $dir")
                 dir.deleteRecursively()

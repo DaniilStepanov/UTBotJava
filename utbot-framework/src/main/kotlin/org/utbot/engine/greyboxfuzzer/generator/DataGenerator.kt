@@ -2,7 +2,6 @@ package org.utbot.engine.greyboxfuzzer.generator
 
 import com.pholser.junit.quickcheck.generator.ComponentizedGenerator
 import com.pholser.junit.quickcheck.generator.GenerationStatus
-import com.pholser.junit.quickcheck.generator.Generator
 import com.pholser.junit.quickcheck.internal.ParameterTypeContext
 import com.pholser.junit.quickcheck.internal.generator.ZilchGenerator
 import com.pholser.junit.quickcheck.random.SourceOfRandomness
@@ -11,22 +10,33 @@ import org.utbot.engine.greyboxfuzzer.util.getFieldValue
 import org.utbot.engine.greyboxfuzzer.util.hasModifiers
 import java.lang.reflect.Modifier
 import java.lang.reflect.Parameter
-import kotlin.system.exitProcess
 
 object DataGenerator {
 
     private val generatorRepository = DataGeneratorSettings.generatorRepository
 
-    fun generate(parameter: Parameter, random: SourceOfRandomness, status: GenerationStatus): FParameter? {
+    fun generate(
+        parameter: Parameter,
+        parameterIndex: Int,
+        random: SourceOfRandomness,
+        status: GenerationStatus
+    ): FParameter? {
+        generatorRepository.removeGenerator(Any::class.java)
         //TODO INPUT RANDOM TYPES INSTEAD OF TYPE PARAMETERS
-        val generator = generatorRepository.getOrProduceGenerator(parameter)
+        val generator =
+            generatorRepository.getOrProduceGenerator(parameter, parameterIndex)
+                ?.also { GeneratorConfigurator.configureGenerator(it, 80) }
         var generatedValue: Any? = null
         repeat(3) {
             println("TRY $it")
-            generatedValue = generator?.generate(random, status) ?: return@repeat
+            generatedValue = try {
+                generator?.generate(random, status) ?: return@repeat
+            } catch (e: Exception) {
+                return@repeat
+            }
             try {
                 println("GENERATED VALUE OF TYPE ${parameter.parameterizedType} = $generatedValue")
-            } catch (e: NullPointerException) {
+            } catch (e: Exception) {
                 println("VALUE GENERATED!")
             }
             if (generatedValue != null) {

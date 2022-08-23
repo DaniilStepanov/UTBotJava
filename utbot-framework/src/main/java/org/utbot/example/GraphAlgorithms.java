@@ -1,5 +1,6 @@
 package org.utbot.example;
 
+import java.io.File;
 import java.util.*;
 import java.util.concurrent.ThreadPoolExecutor;
 
@@ -49,7 +50,7 @@ public class GraphAlgorithms<T extends Number> {
         return false;
     }
 
-    public boolean testFunc3(java.util.concurrent.BlockingQueue<java.lang.Runnable> a) {
+    public boolean testFunc3(A<?> a) {
 //        for (int i = 0; i < array.size() - 1; i++) {
 //            if (array.get(i).a > array.get(i + 1).a) {
 //                return true;

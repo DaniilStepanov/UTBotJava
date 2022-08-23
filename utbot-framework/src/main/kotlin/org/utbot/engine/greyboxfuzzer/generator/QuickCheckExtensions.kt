@@ -4,9 +4,12 @@ import com.pholser.junit.quickcheck.generator.ComponentizedGenerator
 import com.pholser.junit.quickcheck.generator.Generator
 import com.pholser.junit.quickcheck.internal.ParameterTypeContext
 import com.pholser.junit.quickcheck.internal.generator.GeneratorRepository
-import com.pholser.junit.quickcheck.internal.generator.LambdaGenerator
+import org.javaruntype.exceptions.TypeValidationException
 import org.javaruntype.type.Types
-import org.utbot.engine.greyboxfuzzer.util.*
+import org.utbot.engine.greyboxfuzzer.util.getAllDeclaredFields
+import org.utbot.engine.greyboxfuzzer.util.toClass
+import org.utbot.engine.rawType
+import ru.vyarus.java.generics.resolver.GenericsResolver
 import ru.vyarus.java.generics.resolver.context.ConstructorGenericsContext
 import ru.vyarus.java.generics.resolver.context.GenericsContext
 import ru.vyarus.java.generics.resolver.context.GenericsInfo
@@ -54,6 +57,12 @@ fun GeneratorRepository.addGenerator(
     })
 }
 
+fun GeneratorRepository.getGenerators(): HashMap<Class<*>, Set<Generator<*>>> {
+    val generatorsField = this.javaClass.getAllDeclaredFields().find { it.name == "generators" }!!
+    generatorsField.isAccessible = true
+    return generatorsField.get(this) as java.util.HashMap<Class<*>, Set<Generator<*>>>
+}
+
 fun GeneratorRepository.removeGenerator(
     forClass: Class<*>
 ) {
@@ -67,15 +76,32 @@ fun GeneratorRepository.removeGenerator(
 fun GeneratorRepository.getOrProduceGenerator(field: Field, depth: Int = 0): Generator<*>? =
     getOrProduceGenerator(ParameterTypeContext.forField(field), depth)
 
-fun GeneratorRepository.getOrProduceGenerator(param: Parameter, depth: Int = 0): Generator<*>? =
-    getOrProduceGenerator(ParameterTypeContext.forParameter(param), depth)
+fun GeneratorRepository.getOrProduceGenerator(param: Parameter, parameterIndex: Int, depth: Int = 0): Generator<*>? {
+    val parameterTypeContext = try {
+        ParameterTypeContext.forParameter(param)
+    } catch (e: TypeValidationException) {
+        val clazz = param.type
+        val parametersBounds =
+            param.type.typeParameters.map { it.bounds.firstOrNull() ?: Any::class.java.rawType }.toTypedArray()
+        val p = ru.vyarus.java.generics.resolver.context.container.ParameterizedTypeImpl(
+            param.type,
+            *parametersBounds
+        )
+        val genericContext = createGenericsContext(p, clazz)
+        createParameterContextForParameter(param, parameterIndex, genericContext, p)
+    }
+    return getOrProduceGenerator(parameterTypeContext, depth)
+}
+
+
+fun GeneratorRepository.getOrProduceGenerator(clazz: Class<*>, depth: Int = 0): Generator<*>? =
+    getOrProduceGenerator(ParameterTypeContext.forClass(clazz), depth)
 
 fun GeneratorRepository.getOrProduceGenerator(
     parameterTypeContext: ParameterTypeContext,
-    depth: Int = 0,
-    strictClassName: String = ""
+    depth: Int = 0
 ): Generator<*>? {
-    parameterTypeContext.getAllParameterTypeContexts().forEach { typeContext ->
+    parameterTypeContext.getAllParameterTypeContexts().reversed().forEach { typeContext ->
         try {
             this.produceGenerator(parameterTypeContext)
         } catch (e: Exception) {
@@ -84,12 +110,18 @@ fun GeneratorRepository.getOrProduceGenerator(
                 classNameToAddGenerator,
                 typeContext.type(),
                 typeContext,
-                depth
+                depth + 1
             )
         }
     }
-    val generator = this.produceGenerator(parameterTypeContext)
+    val generator = try {
+        this.produceGenerator(parameterTypeContext)
+    } catch (e: Exception) {
+        println("CANT GET GENERATOR FOR ${parameterTypeContext.getResolvedType()}")
+        return null
+    }
     (listOf(generator) + generator.getAllComponents()).forEach {
+        GeneratorConfigurator.configureGenerator(it, 90)
         if (it is UserClassesGenerator) this.removeGenerator(it.parameterTypeContext!!.getResolvedType().rawClass)
     }
     return generator
@@ -129,12 +161,18 @@ private fun ParameterTypeContext.getAllTypeParameters(): List<Type> {
     return res
 }
 
-private fun ParameterTypeContext.getAllParameterTypeContexts(): List<ParameterTypeContext> {
+fun ParameterTypeContext.getAllParameterTypeContexts(): List<ParameterTypeContext> {
     val res = mutableListOf(this)
     val queue = ArrayDeque<ParameterTypeContext>()
+    if (this.isArray) {
+        this.arrayComponentContext().let { queue.add(it) }
+    }
     this.typeParameterContexts(DataGeneratorSettings.sourceOfRandomness).forEach { queue.add(it) }
     while (queue.isNotEmpty()) {
         val el = queue.removeFirst()
+        if (el.isArray) {
+            el.arrayComponentContext().let { queue.add(it) }
+        }
         el.typeParameterContexts(DataGeneratorSettings.sourceOfRandomness).forEach { queue.add(it) }
         res.add(el)
     }
@@ -157,9 +195,9 @@ fun createGenericsContext(resolvedType: Type, clazz: Class<*>): GenericsContext 
     val actualTypeParams =
         (resolvedType as? ru.vyarus.java.generics.resolver.context.container.ParameterizedTypeImpl)?.actualTypeArguments?.toList()
             ?: emptyList()
-    val klassTypeParams = resolvedType.toClass().typeParameters.map { it.name }
+    val klassTypeParams = resolvedType.toClass()?.typeParameters?.map { it.name }
     val gm = LinkedHashMap<String, Type>()
-    klassTypeParams.zip(actualTypeParams).forEach { gm[it.first] = it.second }
+    klassTypeParams?.zip(actualTypeParams)?.forEach { gm[it.first] = it.second }
     val m = mutableMapOf(clazz to gm)
     val genericsInfo = GenericsInfo(clazz, m)
     return GenericsContext(genericsInfo, clazz)
@@ -219,6 +257,25 @@ fun createParameterContextForParameter(
         Types.forJavaLangReflectType(
             resolvedType
         ),
+        generics,
+        parameterIndex
+    )
+}
+
+fun createParameterContextForParameter(
+    parameter: Parameter,
+    parameterIndex: Int,
+    generics: GenericsContext,
+    type: Type
+): ParameterTypeContext {
+    val exec = parameter.declaringExecutable
+    val clazz = exec.declaringClass
+    val declarerName = clazz.name + '.' + exec.name
+    return createParameterTypeContext(
+        parameter.name,
+        parameter.annotatedType,
+        declarerName,
+        Types.forJavaLangReflectType(type),
         generics,
         parameterIndex
     )

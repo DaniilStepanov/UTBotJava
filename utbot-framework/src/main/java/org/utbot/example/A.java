@@ -2,7 +2,7 @@ package org.utbot.example;
 
 import java.util.ArrayList;
 
-public class A<R> {
+public class A<R extends Number> {
 
     public class Lil {
         int a = 1;
@@ -19,7 +19,7 @@ public class A<R> {
     R e;
     B<R> bInstance;
 
-    public static <T, E> A<E> getInstance1(E a, ArrayList<Integer> arr, Class<? extends T> cl) {
+    public static <T, E extends Number> A<E> getInstance1(E a, ArrayList<Integer> arr, Class<? extends T> cl) {
         return new A<E>(1, null, null, null);
     }
 

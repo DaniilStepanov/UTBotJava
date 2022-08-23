@@ -1,5 +1,6 @@
 package org.utbot.instrumentation.process
 
+import mu.KotlinLogging
 import org.utbot.common.scanForClasses
 import org.utbot.framework.plugin.api.util.UtContext
 import org.utbot.instrumentation.agent.Agent

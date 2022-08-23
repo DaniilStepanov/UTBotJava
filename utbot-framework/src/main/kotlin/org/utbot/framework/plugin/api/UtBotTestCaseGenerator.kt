@@ -48,9 +48,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.yield
 import mu.KotlinLogging
+import org.utbot.engine.greyboxfuzzer.util.CoverageCollector
 import soot.Scene
 import soot.jimple.JimpleBody
 import soot.toolkits.graph.ExceptionalUnitGraph
+import kotlin.reflect.jvm.jvmName
+import kotlin.reflect.jvm.kotlinFunction
 import kotlin.system.exitProcess
 
 object UtBotTestCaseGenerator : TestCaseGenerator {
@@ -270,13 +273,15 @@ object UtBotTestCaseGenerator : TestCaseGenerator {
                         //yield one to
                         yield()
 
-                        generate(createSymbolicEngine(
-                            controller,
-                            method,
-                            mockStrategy,
-                            chosenClassesToMockAlways,
-                            executionTimeEstimator
-                        )).collect {
+                        generate(
+                            createSymbolicEngine(
+                                controller,
+                                method,
+                                mockStrategy,
+                                chosenClassesToMockAlways,
+                                executionTimeEstimator
+                            )
+                        ).collect {
                             when (it) {
                                 is UtExecution -> method2executions.getValue(method) += it
                                 is UtError -> method2errors.getValue(method).merge(it.description, 1, Int::plus)
@@ -319,7 +324,42 @@ object UtBotTestCaseGenerator : TestCaseGenerator {
         }
         ConcreteExecutor.defaultPool.close() // TODO: think on appropriate way to close child processes
 
-
+        //Printing to console
+        val clazz = methods.first().clazz
+        val sootClazz = Scene.v().classes.find { it.name == clazz.jvmName }!!
+        val methodsToLineNumbers = sootClazz.methods.mapNotNull {
+            val sig = it.bytecodeSignature.drop(1).dropLast(1).substringAfter("${clazz.jvmName}: ")
+            val (sootMethod, javaMethod) = it to clazz.java.declaredMethods.find { it.signature == sig }
+            if (javaMethod?.kotlinFunction != null) {
+                javaMethod to sootMethod.activeBody.units.map { it.javaSourceStartLineNumber }.filter { it != -1 }
+                    .toSet()
+            } else {
+                null
+            }
+        }
+        println("OVERALL RESULTS:")
+        println("------------------------------------------")
+        for ((method, lines) in methodsToLineNumbers) {
+            val coveredMethodInstructions = CoverageCollector.coverage
+                .filter { it.methodSignature == method.signature }
+                .map { it.lineNumber }
+                .toSet()
+            println("METHOD: ${method.name}")
+            println("COVERED: ${coveredMethodInstructions.size} from ${lines.size} ${coveredMethodInstructions.size.toDouble() / lines.size * 100}%")
+            println("COVERED: ${coveredMethodInstructions.sorted()}")
+            println("NOT COVERED: ${lines.filter { it !in coveredMethodInstructions }.sorted()}")
+            println("------------------")
+        }
+        println("------------------------------------------")
+        val allLinesToCover = methodsToLineNumbers.flatMap { it.second }.toSet()
+        val allLinesToCoverSize = allLinesToCover.size
+        val allCoveredLines = CoverageCollector.coverage
+            .filter { it.className.replace('/', '.') == clazz.jvmName }
+            .map { it.lineNumber }.toSet()
+            .filter { it in allLinesToCover }
+            .size
+        println("FINALLY COVERED $allCoveredLines from $allLinesToCoverSize ${allCoveredLines.toDouble() / allLinesToCoverSize * 100}%")
+        println("------------------------------------------")
         return methods.map { method ->
             UtTestCase(
                 method,

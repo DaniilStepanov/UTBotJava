@@ -9,8 +9,8 @@ import java.util.*
 object DataGeneratorSettings {
 
     val sourceOfRandomness = SourceOfRandomness(Random(42))
-    val generatorRepository = GeneratorRepository(sourceOfRandomness).register(ServiceLoaderGeneratorSource())
+    val generatorRepository = UTGeneratorRepository(sourceOfRandomness).register(ServiceLoaderGeneratorSource())
     val genStatus = NonTrackingGenerationStatus(sourceOfRandomness)
-    const val maxDepthOfGeneration = 5
+    const val maxDepthOfGeneration = 10
 
 }
