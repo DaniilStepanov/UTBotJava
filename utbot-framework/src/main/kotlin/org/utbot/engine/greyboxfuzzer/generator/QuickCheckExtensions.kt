@@ -57,6 +57,17 @@ fun GeneratorRepository.addGenerator(
     })
 }
 
+fun GeneratorRepository.replaceGenerator(
+    forClass: Class<*>,
+    newGenerators: Set<Generator<*>>
+) {
+    val generatorsField = this.javaClass.getAllDeclaredFields().find { it.name == "generators" }!!
+    generatorsField.isAccessible = true
+    val map = generatorsField.get(this) as java.util.HashMap<Class<*>, Set<Generator<*>>>
+    map[forClass] = newGenerators
+}
+
+
 fun GeneratorRepository.getGenerators(): HashMap<Class<*>, Set<Generator<*>>> {
     val generatorsField = this.javaClass.getAllDeclaredFields().find { it.name == "generators" }!!
     generatorsField.isAccessible = true
@@ -99,11 +110,12 @@ fun GeneratorRepository.getOrProduceGenerator(clazz: Class<*>, depth: Int = 0): 
 
 fun GeneratorRepository.getOrProduceGenerator(
     parameterTypeContext: ParameterTypeContext,
-    depth: Int = 0
+    depth: Int
 ): Generator<*>? {
     parameterTypeContext.getAllParameterTypeContexts().reversed().forEach { typeContext ->
+        if (typeContext.getResolvedType().toString().contains("$")) return null
         try {
-            this.produceGenerator(parameterTypeContext)
+            this.produceGenerator(typeContext)
         } catch (e: Exception) {
             val classNameToAddGenerator = typeContext.rawClass
             this.addGenerator(

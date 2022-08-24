@@ -15,7 +15,11 @@ fun Class<*>.getAllDeclaredFields(): List<Field> {
     val res = mutableListOf<Field>()
     var current: Class<*>? = this
     while (current != null) {
-        res.addAll(current.declaredFields)
+        try {
+            res.addAll(current.declaredFields)
+        } catch (_: Error) {
+
+        }
         current = current.superclass
     }
     return res
@@ -61,7 +65,7 @@ fun Class<*>.getAllSuperClassesAndInterfaces(): List<Class<*>> {
     var superClass = this.superclass
     res.add(superClass)
     res.addAll(this.interfaces)
-    while(superClass != null) {
+    while (superClass != null) {
         res.addAll(superClass.interfaces)
         superClass = superClass.superclass?.also { res.add(it) }
     }
@@ -72,14 +76,14 @@ fun Field.getFieldValue(instance: Any?): Any? {
     val oldAccessibleFlag = this.isAccessible
     this.isAccessible = true
     return when (this.type) {
-        Boolean::class.javaObjectType -> this.getBoolean(instance)
-        Byte::class.javaObjectType -> this.getByte(instance)
-        Char::class.javaObjectType -> this.getChar(instance)
-        Short::class.javaObjectType -> this.getShort(instance)
-        Int::class.javaObjectType -> this.getInt(instance)
-        Long::class.javaObjectType -> this.getLong(instance)
-        Float::class.javaObjectType -> this.getFloat(instance)
-        Double::class.javaObjectType -> this.getDouble(instance)
+        Boolean::class.javaPrimitiveType -> this.getBoolean(instance)
+        Byte::class.javaPrimitiveType -> this.getByte(instance)
+        Char::class.javaPrimitiveType -> this.getChar(instance)
+        Short::class.javaPrimitiveType -> this.getShort(instance)
+        Int::class.javaPrimitiveType -> this.getInt(instance)
+        Long::class.javaPrimitiveType -> this.getLong(instance)
+        Float::class.javaPrimitiveType -> this.getFloat(instance)
+        Double::class.javaPrimitiveType -> this.getDouble(instance)
         else -> this.get(instance)
     }.also { this.isAccessible = oldAccessibleFlag }
 }
@@ -88,14 +92,14 @@ fun Field.setFieldValue(instance: Any?, fieldValue: Any?) {
     val oldAccessibleFlag = this.isAccessible
     this.isAccessible = true
     when (this.type) {
-        Boolean::class.javaObjectType -> this.setBoolean(instance, fieldValue as Boolean)
-        Byte::class.javaObjectType -> this.setByte(instance, fieldValue as Byte)
-        Char::class.javaObjectType -> this.setChar(instance, fieldValue as Char)
-        Short::class.javaObjectType -> this.setShort(instance, fieldValue as Short)
-        Int::class.javaObjectType -> this.setInt(instance, fieldValue as Int)
-        Long::class.javaObjectType -> this.setLong(instance, fieldValue as Long)
-        Float::class.javaObjectType -> this.setFloat(instance, fieldValue as Float)
-        Double::class.javaObjectType -> this.setDouble(instance, fieldValue as Double)
+        Boolean::class.javaPrimitiveType -> this.setBoolean(instance, fieldValue as Boolean)
+        Byte::class.javaPrimitiveType -> this.setByte(instance, fieldValue as Byte)
+        Char::class.javaPrimitiveType -> this.setChar(instance, fieldValue as Char)
+        Short::class.javaPrimitiveType -> this.setShort(instance, fieldValue as Short)
+        Int::class.javaPrimitiveType -> this.setInt(instance, fieldValue as Int)
+        Long::class.javaPrimitiveType -> this.setLong(instance, fieldValue as Long)
+        Float::class.javaPrimitiveType -> this.setFloat(instance, fieldValue as Float)
+        Double::class.javaPrimitiveType -> this.setDouble(instance, fieldValue as Double)
         else -> this.set(instance, fieldValue)
     }.also { this.isAccessible = oldAccessibleFlag }
 }
@@ -164,6 +168,7 @@ fun Class<*>.hasModifiers(vararg modifiers: Int) = modifiers.all { it.and(this.m
 fun Constructor<*>.hasModifiers(vararg modifiers: Int) = modifiers.all { it.and(this.modifiers) > 0 }
 fun Constructor<*>.hasAtLeastOneOfModifiers(vararg modifiers: Int) = modifiers.any { it.and(this.modifiers) > 0 }
 fun Class<*>.hasAtLeastOneOfModifiers(vararg modifiers: Int) = modifiers.any { it.and(this.modifiers) > 0 }
+fun Field.hasAtLeastOneOfModifiers(vararg modifiers: Int) = modifiers.any { it.and(this.modifiers) > 0 }
 
 fun ru.vyarus.java.generics.resolver.context.container.ParameterizedTypeImpl.getActualArguments(): Array<Type> {
     val args = this.javaClass.getAllDeclaredFields().find { it.name == "actualArguments" } ?: return arrayOf()

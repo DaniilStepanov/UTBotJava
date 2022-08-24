@@ -236,7 +236,11 @@ internal class UtModelConstructor(
      */
     private fun constructFromAny(value: Any): UtModel =
         constructedObjects.getOrElse(value) {
-            tryConstructUtAssembleModel(value) ?: constructCompositeModel(value)
+            try {
+                tryConstructUtAssembleModel(value) ?: constructCompositeModel(value)
+            } catch (e: Throwable) {
+                constructCompositeModel(value)
+            }
         }
 
     /**

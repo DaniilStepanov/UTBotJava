@@ -65,6 +65,9 @@ class UserClassesGenerator : ComponentizedGenerator<Any>(Any::class.java) {
         if (depth >= DataGeneratorSettings.maxDepthOfGeneration) return null
         val parameterType = parameterTypeContext!!.getResolvedType()
         println("TRYING TO GENERATE $parameterType depth: $depth")
+        //TODO! generate inner classes instances
+        //if (TypeUtils.getOuter(resolvedJavaType) != null) return null
+        if (parameterType.toString().contains("$")) return null
         if (parameterType.componentClass.name == "java.lang.Object") {
             return DataGeneratorSettings.generatorRepository
                 .getGenerators()
@@ -96,42 +99,35 @@ class UserClassesGenerator : ComponentizedGenerator<Any>(Any::class.java) {
                 resolvedJavaType, parameterTypeContext!!, depth
             )
         }
-        //TODO!! Implement generation for Inner classes
-        if (TypeUtils.getOuter(resolvedJavaType) != null) return null
-        val inst =
-            if (Random.getTrue(50)) {
-                InstancesGenerator.generateInstanceViaConstructor(
-                    resolvedJavaType.toClass()!!,
-                    gctx,
-                    depth
-                ) ?: InstancesGenerator.generateInstanceWithStatics(
-                    Types.forJavaLangReflectType(resolvedJavaType),
-                    gctx,
-                    parameterTypeContext!!,
-                    depth
-                )
-            } else {
-                InstancesGenerator.generateInstanceWithStatics(
-                    Types.forJavaLangReflectType(resolvedJavaType),
-                    gctx,
-                    parameterTypeContext!!,
-                    depth
-                ) ?: InstancesGenerator.generateInstanceViaConstructor(
-                    resolvedJavaType.toClass()!!,
-                    gctx,
-                    depth
-                )
-            }
-        if (inst == null) {
-            val staticGenerators = SootStaticsCollector.getStaticInstancesOf(parameterTypeContext!!.rawClass)
-            if (staticGenerators.isNotEmpty()) {
-                val randomMethod = staticGenerators.chooseRandomMethodToGenerateInstance()
-                if (randomMethod != null) {
-                    InstancesGenerator.generateInterfaceInstanceViaStaticCall(randomMethod, depth)?.let { return it }
+        val typeOfGenerations = mutableListOf('c', 'c', 's', 'e', 'u')
+        while (true) {
+            val randomTypeOfGeneration = typeOfGenerations.randomOrNull() ?: return null
+            val generatedInstance =
+                when (randomTypeOfGeneration) {
+                    'c' -> InstancesGenerator.generateInstanceViaConstructor(resolvedJavaType.toClass()!!, gctx, depth)
+                    's' -> InstancesGenerator.generateInstanceWithStatics(
+                        Types.forJavaLangReflectType(resolvedJavaType),
+                        gctx,
+                        parameterTypeContext!!,
+                        depth
+                    )
+                    'e' -> run {
+                        val staticGenerators =
+                            SootStaticsCollector.getStaticInstancesOf(parameterTypeContext!!.rawClass)
+                        if (staticGenerators.isNotEmpty()) {
+                            val randomMethod = staticGenerators.chooseRandomMethodToGenerateInstance()
+                            if (randomMethod != null) {
+                                InstancesGenerator.generateInterfaceInstanceViaStaticCall(randomMethod, depth)
+                            } else {
+                                null
+                            }
+                        } else {
+                            null
+                        }
+                    }
+                    else -> InstancesGenerator.generateInstanceWithUnsafe(resolvedJavaType.toClass()!!, depth)
                 }
-            }
-            return InstancesGenerator.generateInstanceWithUnsafe(resolvedJavaType.toClass()!!)
+            generatedInstance?.let { return it } ?: typeOfGenerations.removeIf { it == randomTypeOfGeneration }
         }
-        return inst
     }
 }

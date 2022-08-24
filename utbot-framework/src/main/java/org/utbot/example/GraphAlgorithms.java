@@ -5,7 +5,10 @@ import java.util.*;
 import java.util.concurrent.ThreadPoolExecutor;
 
 public class GraphAlgorithms<T extends Number> {
-    public static boolean bfs(Graph graph, int startNodeNumber, int goalNodeNumber) {
+
+    ArrayList<? extends Double> arr2;
+
+    public boolean bfs(Graph graph, int startNodeNumber, int goalNodeNumber) {
         Deque<Integer> queue = new LinkedList<>();//(graph.getSize());
         boolean[] visited = new boolean[graph.getSize()];
         queue.push(startNodeNumber);
@@ -50,7 +53,13 @@ public class GraphAlgorithms<T extends Number> {
         return false;
     }
 
-    public boolean testFunc3(A<?> a) {
+
+    public boolean testFunc3(Hashtable<A<? extends Number>, File> a) {
+        int c = 0;
+        for (Double aDouble : arr2) {
+            c += 1 + aDouble.intValue();
+        }
+        System.out.println("C = " + c);
 //        for (int i = 0; i < array.size() - 1; i++) {
 //            if (array.get(i).a > array.get(i + 1).a) {
 //                return true;

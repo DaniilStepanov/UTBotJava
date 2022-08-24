@@ -13,7 +13,7 @@ import java.lang.reflect.Parameter
 
 object DataGenerator {
 
-    private val generatorRepository = DataGeneratorSettings.generatorRepository
+    val generatorRepository = DataGeneratorSettings.generatorRepository
 
     fun generate(
         parameter: Parameter,
@@ -105,7 +105,7 @@ object DataGenerator {
                         }
                     }
                 val generatorOfNeededType =
-                    generatorRepository.getOrProduceGenerator(ParameterTypeContext.forClass(fieldClass))
+                    generatorRepository.getOrProduceGenerator(ParameterTypeContext.forClass(fieldClass), depth)
                         .let { gen ->
                             if (gen is ComponentizedGenerator && gen.getComponents().any { it is ZilchGenerator }) null
                             else gen

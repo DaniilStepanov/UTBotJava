@@ -1,5 +1,8 @@
 package org.utbot.engine.greyboxfuzzer.generator
 
+import com.pholser.junit.quickcheck.generator.java.util.HashSetGenerator
+import com.pholser.junit.quickcheck.generator.java.util.LinkedHashSetGenerator
+import com.pholser.junit.quickcheck.generator.java.util.MapGenerator
 import com.pholser.junit.quickcheck.internal.ParameterTypeContext
 import org.javaruntype.type.Types
 import org.utbot.engine.greyboxfuzzer.util.*
@@ -26,13 +29,18 @@ object InstancesGenerator {
                             Modifier.PROTECTED,
                             Modifier.PRIVATE
                         )
-                    }.chooseRandomConstructor()
+                    }
+                    //Avoiding recursion
+                    .filter { it.parameterTypes.all { !it.name.contains(clazz.name) } }
+                    .chooseRandomConstructor()
             } catch (e: Error) {
                 null
             }
         val randomConstructor =
             try {
-                clazz.declaredConstructors.toList().chooseRandomConstructor()
+                clazz.declaredConstructors
+                    .filter { it.parameterTypes.all { !it.name.contains(clazz.name) } }
+                    .toList().chooseRandomConstructor()
             } catch (e: Error) {
                 null
             }
@@ -46,9 +54,10 @@ object InstancesGenerator {
             val generator = DataGeneratorSettings.generatorRepository.getOrProduceGenerator(
                 parameterContext,
                 depth
-            )!!
+            )
+            println("GOT A GENERATOR $generator")
             try {
-                generator.generate(DataGeneratorSettings.sourceOfRandomness, DataGeneratorSettings.genStatus)
+                generator?.generate(DataGeneratorSettings.sourceOfRandomness, DataGeneratorSettings.genStatus)
             } catch (e: Exception) {
                 null
             }
@@ -80,6 +89,7 @@ object InstancesGenerator {
                 resolvedType.componentClass.declaredMethods.filter { it.hasModifiers(Modifier.STATIC, Modifier.PUBLIC) }
                     .map { it to gctx.method(it).resolveReturnType() }
                     .filter { it.first.returnType.toClass() == resolvedType.componentClass }
+                    .filter { it.first.parameterTypes.all { !it.name.contains(resolvedType.componentClass.name) } }
             } catch (e: Error) {
                 listOf()
             }
@@ -148,19 +158,26 @@ object InstancesGenerator {
                 } catch (e: Exception) {
                     val clazz = indexedParameter.value.type
                     val parametersBounds =
-                        indexedParameter.value.type.typeParameters.map { it.bounds.firstOrNull() ?: Any::class.java.rawType }.toTypedArray()
+                        indexedParameter.value.type.typeParameters.map {
+                            it.bounds.firstOrNull() ?: Any::class.java.rawType
+                        }.toTypedArray()
                     val p = ru.vyarus.java.generics.resolver.context.container.ParameterizedTypeImpl(
                         indexedParameter.value.type,
                         *parametersBounds
                     )
                     val genericContext = createGenericsContext(p, clazz)
-                    createParameterContextForParameter(indexedParameter.value, indexedParameter.index, genericContext, p)
+                    createParameterContextForParameter(
+                        indexedParameter.value,
+                        indexedParameter.index,
+                        genericContext,
+                        p
+                    )
                 }
             val generator = DataGeneratorSettings.generatorRepository.getOrProduceGenerator(
                 parameterContext,
                 depth
-            )!!
-            generator.generate(DataGeneratorSettings.sourceOfRandomness, DataGeneratorSettings.genStatus)
+            )
+            generator?.generate(DataGeneratorSettings.sourceOfRandomness, DataGeneratorSettings.genStatus)
         }
         return try {
             method.invoke(null, *args.toTypedArray())
@@ -278,10 +295,53 @@ object InstancesGenerator {
             depth
         )
 
-    //TODO! Improve unsafe generation!
-    fun generateInstanceWithUnsafe(clazz: Class<*>): Any? {
-        return null
-        return UserClassesGenerator.UNSAFE.allocateInstance(clazz)
+    fun generateInstanceWithUnsafe(clazz: Class<*>, depth: Int): Any? {
+        println("TRYING TO GENERATE ${clazz.name} instance")
+        if (depth >= DataGeneratorSettings.maxDepthOfGeneration) return null
+        val clazzInstance =
+            try {
+                UserClassesGenerator.UNSAFE.allocateInstance(clazz)
+            } catch (e: Exception) {
+                return null
+            } catch (e: Error) {
+                return null
+            }
+        val parameterTypeContext = ParameterTypeContext.forClass(clazz)
+        for (field in clazz.getAllDeclaredFields()) {
+            if (field.hasModifiers(Modifier.STATIC, Modifier.FINAL)) continue
+            field.isAccessible = true
+            val oldFieldValue = field.getFieldValue(clazzInstance)
+
+//            //TODO!! TEMPORARY
+//            if (oldFieldValue != null) continue
+
+            if (field.hasAtLeastOneOfModifiers(Modifier.FINAL, Modifier.STATIC) && oldFieldValue != null) continue
+            val fieldType = parameterTypeContext.getGenericContext().resolveFieldType(field)
+            println("F = $field TYPE = $fieldType OLDVALUE = $oldFieldValue")
+            val parameterTypeContextForResolvedType = createParameterTypeContext(
+                field.name,
+                field.annotatedType,
+                field.declaringClass.name,
+                Types.forJavaLangReflectType(fieldType),
+                parameterTypeContext.getGenericContext()
+            )
+            val generator = DataGeneratorSettings.generatorRepository.getOrProduceGenerator(
+                parameterTypeContextForResolvedType,
+                depth
+            )
+            println("I GOT GENERATOR!! $generator")
+            val newFieldValue =
+                try {
+                    generator?.generate(DataGeneratorSettings.sourceOfRandomness, DataGeneratorSettings.genStatus)
+                } catch (e: Exception) {
+                    null
+                }
+            println("NEW VALUE GENERATED!!")
+            if (newFieldValue != null) {
+                field.setFieldValue(clazzInstance, newFieldValue)
+            }
+        }
+        return clazzInstance
     }
 
 //    private fun generateFieldValue(field: Field, gctx: GenericsContext, setAllObjectsToNull: Boolean, depth: Int): Any? =

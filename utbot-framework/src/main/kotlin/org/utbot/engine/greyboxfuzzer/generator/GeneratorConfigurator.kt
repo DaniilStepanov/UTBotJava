@@ -10,6 +10,7 @@ import com.pholser.junit.quickcheck.generator.java.lang.FloatGenerator
 import com.pholser.junit.quickcheck.generator.java.lang.IntegerGenerator
 import com.pholser.junit.quickcheck.generator.java.lang.ShortGenerator
 import com.pholser.junit.quickcheck.generator.java.util.CollectionGenerator
+import com.pholser.junit.quickcheck.generator.java.util.MapGenerator
 import com.pholser.junit.quickcheck.internal.generator.ArrayGenerator
 import org.utbot.engine.greyboxfuzzer.util.getTrue
 import org.utbot.engine.greyboxfuzzer.util.setFieldValue
@@ -32,8 +33,8 @@ object GeneratorConfigurator {
     private val maxDouble: Double = 100.0
     private val minStringLength: Int = 1
     private val maxStringLength: Int = 10
-    private val minCollectionSize: Int = 1
-    private val maxCollectionSize: Int = 10
+    val minCollectionSize: Int = 1
+    val maxCollectionSize: Int = 5
 
     private val sizeAnnotationInstance: Size
     private val inRangeAnnotationInstance: InRange
@@ -86,6 +87,7 @@ object GeneratorConfigurator {
             is DoubleGenerator -> generator.configure(inRangeAnnotationInstance)
             is CollectionGenerator<*> -> generator.configure(sizeAnnotationInstance)
             is ArrayGenerator -> generator.configure(sizeAnnotationInstance)
+            is MapGenerator -> generator.configure(sizeAnnotationInstance)
             else -> Unit
         }
 

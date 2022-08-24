@@ -14,7 +14,7 @@ object SootStaticsCollector {
             it.methods
                 .asSequence()
                 .filter { it.isStatic && it.returnType.toString() == clazz.name }
-                .filter { it.parameterTypes.all { it.toString() != clazz.name } }
+                .filter { it.parameterTypes.all { !it.toString().contains(clazz.name) } }
                 .filter { !it.toString().contains('$') }
                 .toList()
         }

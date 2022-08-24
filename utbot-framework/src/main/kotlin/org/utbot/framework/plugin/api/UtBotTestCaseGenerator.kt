@@ -1,5 +1,6 @@
 package org.utbot.framework.plugin.api
 
+import kotlinx.coroutines.*
 import org.utbot.common.FileUtil
 import org.utbot.common.bracket
 import org.utbot.common.runBlockingWithCancellationPredicate
@@ -36,22 +37,17 @@ import java.util.IdentityHashMap
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.math.min
 import kotlin.reflect.KCallable
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.GlobalScope
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.flattenConcat
 import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.yield
 import mu.KotlinLogging
+import org.utbot.engine.greyboxfuzzer.generator.ThisInstanceGenerator
 import org.utbot.engine.greyboxfuzzer.util.CoverageCollector
 import soot.Scene
 import soot.jimple.JimpleBody
 import soot.toolkits.graph.ExceptionalUnitGraph
+import java.time.Duration
 import kotlin.reflect.jvm.jvmName
 import kotlin.reflect.jvm.kotlinFunction
 import kotlin.system.exitProcess
@@ -263,6 +259,8 @@ object UtBotTestCaseGenerator : TestCaseGenerator {
         val method2controller = methods.associateWith { EngineController() }
         val method2executions = methods.associateWith { mutableListOf<UtExecution>() }
         val method2errors = methods.associateWith { mutableMapOf<String, Int>() }
+        //Init this
+        //ThisInstanceGenerator.generateThis(methods.first().clazz.java)
 
         runIgnoringCancellationException {
             runBlockingWithCancellationPredicate(isCanceled) {
@@ -287,6 +285,20 @@ object UtBotTestCaseGenerator : TestCaseGenerator {
                                 is UtError -> method2errors.getValue(method).merge(it.description, 1, Int::plus)
                             }
                         }
+//                        generate(
+//                            createSymbolicEngine(
+//                                controller,
+//                                method,
+//                                mockStrategy,
+//                                chosenClassesToMockAlways,
+//                                executionTimeEstimator
+//                            )
+//                        ).collect {
+//                            when (it) {
+//                                is UtExecution -> method2executions.getValue(method) += it
+//                                is UtError -> method2errors.getValue(method).merge(it.description, 1, Int::plus)
+//                            }
+//                        }
                     }
                     controller.paused = true
                 }
@@ -331,7 +343,9 @@ object UtBotTestCaseGenerator : TestCaseGenerator {
             val sig = it.bytecodeSignature.drop(1).dropLast(1).substringAfter("${clazz.jvmName}: ")
             val (sootMethod, javaMethod) = it to clazz.java.declaredMethods.find { it.signature == sig }
             if (javaMethod?.kotlinFunction != null) {
-                javaMethod to sootMethod.activeBody.units.map { it.javaSourceStartLineNumber }.filter { it != -1 }
+                javaMethod to sootMethod.activeBody.units
+                    .map { it.javaSourceStartLineNumber }
+                    .filter { it != -1 }
                     .toSet()
             } else {
                 null

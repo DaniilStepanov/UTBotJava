@@ -100,6 +100,8 @@ import org.utbot.engine.util.statics.concrete.makeEnumStaticFieldsUpdates
 import org.utbot.engine.util.statics.concrete.makeSymbolicValuesFromEnumConcreteValues
 import org.utbot.engine.greyboxfuzzer.ZestFuzzer
 import org.utbot.engine.greyboxfuzzer.generator.DataGeneratorSettings
+import org.utbot.engine.greyboxfuzzer.generator.InstancesGenerator
+import org.utbot.engine.greyboxfuzzer.generator.ThisInstanceGenerator
 import org.utbot.engine.greyboxfuzzer.generator.getOrProduceGenerator
 import org.utbot.external.api.classIdForType
 import org.utbot.framework.PathSelectorType
@@ -246,6 +248,7 @@ import kotlin.math.min
 import kotlin.reflect.full.instanceParameter
 import kotlin.reflect.full.valueParameters
 import kotlin.reflect.jvm.javaType
+import kotlin.system.exitProcess
 
 private val logger = KotlinLogging.logger {}
 val pathLogger = KotlinLogging.logger(logger.name + ".path")
@@ -562,6 +565,17 @@ class UtBotSymbolicEngine(
         val coveredInstructionTracker = mutableSetOf<Instruction>()
         var attempts = UtSettings.fuzzingMaxAttemps
 
+        val clazz = methodUnderTest.clazz.java
+        val myThisInstance =
+            if (!methodUnderTest.isStatic) {
+                InstancesGenerator.generateInstanceWithUnsafe(clazz, 0)?.let {
+                    UtModelConstructor(IdentityHashMap()).construct(it, classIdForType(clazz))
+                } ?: thisInstance
+            } else thisInstance
+//        ThisInstanceGenerator.utModelThisInstance ?: thisInstance
+//        val myThisInstance = thisInstance
+
+
 //        val myThisInstance = run {
 //            val clazz = methodUnderTest.clazz.java
 //            val generator = DataGeneratorSettings.generatorRepository.getOrProduceGenerator(clazz, 0)
@@ -578,9 +592,16 @@ class UtBotSymbolicEngine(
 //        println("INST = $inst")
 
 
-
 //        println("THIS INSTANCE = ${myThisInstance?.toString()}")
-        ZestFuzzer(concreteExecutor, methodUnderTest, listOf(), thisInstance).fuzz()
+        try {
+            ZestFuzzer(concreteExecutor, methodUnderTest, listOf(), myThisInstance).fuzz()
+        } catch (e: CancellationException) {
+            logger.debug { "Cancelled by timeout" }
+        } catch (e: ConcreteExecutionFailureException) {
+            emitFailedConcreteExecutionResult(EnvironmentModels(thisInstance, listOf(), mapOf()), e)
+        } catch (e: Throwable) {
+            emit(UtError("Default concrete execution failed", e))
+        }
         return@flow
 //        fuzz(methodUnderTestDescription, modelProviderWithFallback).forEachIndexed { index, parameters ->
 //            val initialEnvironmentModels = EnvironmentModels(thisInstance, parameters, mapOf())
