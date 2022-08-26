@@ -10,7 +10,7 @@ object ThisInstanceGenerator {
     var utModelThisInstance: UtModel? = null
 
     fun generateThis(clazz: Class<*>) {
-        utModelThisInstance = InstancesGenerator.generateInstanceWithUnsafe(clazz, 0)?.let {
+        utModelThisInstance = InstancesGenerator.generateInstanceWithUnsafe(clazz, 0, true)?.let {
             UtModelConstructor(IdentityHashMap()).construct(it, classIdForType(clazz))
         }
     }

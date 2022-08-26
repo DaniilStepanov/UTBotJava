@@ -1,6 +1,5 @@
 package org.utbot.engine.greyboxfuzzer
 
-import com.pholser.junit.quickcheck.internal.ParameterTypeContext
 import com.pholser.junit.quickcheck.random.SourceOfRandomness
 import edu.berkeley.cs.jqf.fuzz.ei.ZestGuidance
 import org.utbot.engine.executeConcretely
@@ -12,7 +11,6 @@ import org.utbot.framework.concrete.UtConcreteExecutionResult
 import org.utbot.framework.concrete.UtExecutionInstrumentation
 import org.utbot.framework.concrete.UtModelConstructor
 import org.utbot.framework.plugin.api.*
-import org.utbot.framework.plugin.api.util.id
 import org.utbot.framework.plugin.api.util.signature
 import org.utbot.framework.plugin.api.util.utContext
 import org.utbot.instrumentation.ConcreteExecutor
@@ -25,14 +23,12 @@ import java.util.*
 import kotlin.reflect.KFunction
 import kotlin.reflect.jvm.javaMethod
 import kotlin.reflect.jvm.jvmName
-import kotlin.reflect.jvm.kotlinFunction
-import kotlin.system.exitProcess
 
 class ZestFuzzer(
     private val concreteExecutor: ConcreteExecutor<UtConcreteExecutionResult, UtExecutionInstrumentation>,
     private val methodUnderTest: UtMethod<*>,
     private val instrumentation: List<UtInstrumentation>,
-    private val thisInstance: UtModel?,
+    private val thisInstance: Any?,
 ) {
 
     /**
@@ -50,7 +46,7 @@ class ZestFuzzer(
         val method = kfunction.javaMethod!!
         val clazz = methodUnderTest.clazz
         //TODO!! DO NOT FORGET TO REMOVE IT
-        //if (method.name != "checkArgsAreAscending") return sequenceOf()
+        //if (method.name != "searchLineNumber") return sequenceOf()
         val cl = Scene.v().classes.find { it.name == methodUnderTest.clazz.jvmName }!!
         val sootMethod =
             cl.methods.find {
@@ -71,11 +67,6 @@ class ZestFuzzer(
                         DataGeneratorSettings.genStatus
                     ) to classIdForType(parameter.type)
                 }
-
-            //println("GENERATED PARAMETERS = $generatedParameters")
-            //println("GENERATED PARAMS = $generatedParameters")
-//            val generatedParameterAsUtModel = generatedParameters.map { UtPrimitiveModel(it!!.value) }
-            //public void testLocalDateTimeSerialization(int year, int month, int dayOfMonth, int hour, int minute, int second) {
             val generatedParameterAsUtModel = generatedParameters.map {
                 if (it.first == null) {
                     UtNullModel(it.second)
@@ -87,20 +78,21 @@ class ZestFuzzer(
                     }
                 }
             }
-
-//            val myThisInstance =
-//                if (!methodUnderTest.isStatic) {
-//                    val generator = DataGenerator.generatorRepository.getOrProduceGenerator(ParameterTypeContext.forClass(clazz.java), 0)
-//                    generator?.generate(DataGeneratorSettings.sourceOfRandomness, DataGeneratorSettings.genStatus)?.let {
-//                        UtModelConstructor(IdentityHashMap()).construct(it, classIdForType(clazz.java))
-//                    } ?: thisInstance
-//    //                InstancesGenerator.generateInstanceWithUnsafe(clazz.java, 0)?.let {
-//    //                    UtModelConstructor(IdentityHashMap()).construct(it, classIdForType(clazz.java))
-//    //                } ?: thisInstance
-//                } else thisInstance
-
             //TODO regenerate fiels of thisInstance
-            val initialEnvironmentModels = EnvironmentModels(thisInstance, generatedParameterAsUtModel, mapOf())
+            if (it != 0 && Random().nextBoolean() && thisInstance != null) {
+                InstancesGenerator.regenerateRandomFields(clazz.java, thisInstance)
+            }
+            val thisInstanceAsUtModel =
+                if (thisInstance != null) {
+                    UtModelConstructor(IdentityHashMap()).construct(thisInstance, classIdForType(clazz.java))
+                } else {
+                    if (methodUnderTest.isStatic) {
+                        null
+                    } else {
+                        UtNullModel(classIdForType(clazz.java))
+                    }
+                }
+            val initialEnvironmentModels = EnvironmentModels(thisInstanceAsUtModel, generatedParameterAsUtModel, mapOf())
             println("EXECUTING FUNCTION ${method.name}")
             try {
                 val executor =
@@ -113,6 +105,7 @@ class ZestFuzzer(
                     executor.executeConcretely(methodUnderTest, initialEnvironmentModels, listOf())
                 println("EXEC RES = ${executionResult.result}")
                 val coveredLines = executionResult.coverage.coveredInstructions.map { it.lineNumber }.toSet()
+                println("EXECUTOR = ${executor.instrumentation}")
                 executionResult.coverage.coveredInstructions.forEach { CoverageCollector.coverage.add(it) }
                 val coveredMethodInstructions = CoverageCollector.coverage
                     .filter { it.methodSignature == method.signature }

@@ -75,35 +75,62 @@ fun Class<*>.getAllSuperClassesAndInterfaces(): List<Class<*>> {
 fun Field.getFieldValue(instance: Any?): Any? {
     val oldAccessibleFlag = this.isAccessible
     this.isAccessible = true
+    val fixedInstance =
+        if (this.isStatic) {
+            null
+        } else instance
     return when (this.type) {
-        Boolean::class.javaPrimitiveType -> this.getBoolean(instance)
-        Byte::class.javaPrimitiveType -> this.getByte(instance)
-        Char::class.javaPrimitiveType -> this.getChar(instance)
-        Short::class.javaPrimitiveType -> this.getShort(instance)
-        Int::class.javaPrimitiveType -> this.getInt(instance)
-        Long::class.javaPrimitiveType -> this.getLong(instance)
-        Float::class.javaPrimitiveType -> this.getFloat(instance)
-        Double::class.javaPrimitiveType -> this.getDouble(instance)
-        else -> this.get(instance)
+        Boolean::class.javaPrimitiveType -> this.getBoolean(fixedInstance)
+        Byte::class.javaPrimitiveType -> this.getByte(fixedInstance)
+        Char::class.javaPrimitiveType -> this.getChar(fixedInstance)
+        Short::class.javaPrimitiveType -> this.getShort(fixedInstance)
+        Int::class.javaPrimitiveType -> this.getInt(fixedInstance)
+        Long::class.javaPrimitiveType -> this.getLong(fixedInstance)
+        Float::class.javaPrimitiveType -> this.getFloat(fixedInstance)
+        Double::class.javaPrimitiveType -> this.getDouble(fixedInstance)
+        else -> this.get(fixedInstance)
     }.also { this.isAccessible = oldAccessibleFlag }
 }
 
 fun Field.setFieldValue(instance: Any?, fieldValue: Any?) {
     val oldAccessibleFlag = this.isAccessible
     this.isAccessible = true
+    val fixedInstance =
+        if (this.isStatic) {
+            null
+        } else instance
     when (this.type) {
-        Boolean::class.javaPrimitiveType -> this.setBoolean(instance, fieldValue as Boolean)
-        Byte::class.javaPrimitiveType -> this.setByte(instance, fieldValue as Byte)
-        Char::class.javaPrimitiveType -> this.setChar(instance, fieldValue as Char)
-        Short::class.javaPrimitiveType -> this.setShort(instance, fieldValue as Short)
-        Int::class.javaPrimitiveType -> this.setInt(instance, fieldValue as Int)
-        Long::class.javaPrimitiveType -> this.setLong(instance, fieldValue as Long)
-        Float::class.javaPrimitiveType -> this.setFloat(instance, fieldValue as Float)
-        Double::class.javaPrimitiveType -> this.setDouble(instance, fieldValue as Double)
-        else -> this.set(instance, fieldValue)
+        Boolean::class.javaPrimitiveType -> this.setBoolean(fixedInstance, fieldValue as Boolean)
+        Byte::class.javaPrimitiveType -> this.setByte(fixedInstance, fieldValue as Byte)
+        Char::class.javaPrimitiveType -> this.setChar(fixedInstance, fieldValue as Char)
+        Short::class.javaPrimitiveType -> this.setShort(fixedInstance, fieldValue as Short)
+        Int::class.javaPrimitiveType -> this.setInt(fixedInstance, fieldValue as Int)
+        Long::class.javaPrimitiveType -> this.setLong(fixedInstance, fieldValue as Long)
+        Float::class.javaPrimitiveType -> this.setFloat(fixedInstance, fieldValue as Float)
+        Double::class.javaPrimitiveType -> this.setDouble(fixedInstance, fieldValue as Double)
+        else -> this.set(fixedInstance, fieldValue)
     }.also { this.isAccessible = oldAccessibleFlag }
 }
 
+fun Field.setDefaultValue(instance: Any?) {
+    val oldAccessibleFlag = this.isAccessible
+    this.isAccessible = true
+    val fixedInstance =
+        if (this.isStatic) {
+            null
+        } else instance
+    when (this.type) {
+        Boolean::class.javaPrimitiveType -> this.setBoolean(fixedInstance, false)
+        Byte::class.javaPrimitiveType -> this.setByte(fixedInstance, 0)
+        Char::class.javaPrimitiveType -> this.setChar(fixedInstance, '\u0000')
+        Short::class.javaPrimitiveType -> this.setShort(fixedInstance, 0)
+        Int::class.javaPrimitiveType -> this.setInt(fixedInstance, 0)
+        Long::class.javaPrimitiveType -> this.setLong(fixedInstance, 0)
+        Float::class.javaPrimitiveType -> this.setFloat(fixedInstance, 0.0f)
+        Double::class.javaPrimitiveType -> this.setDouble(fixedInstance, 0.0)
+        else -> this.set(fixedInstance, null)
+    }.also { this.isAccessible = oldAccessibleFlag }
+}
 fun Type.toClass(): Class<*>? =
     try {
         when (this) {

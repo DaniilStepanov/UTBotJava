@@ -9,24 +9,17 @@ import org.javaruntype.type.TypeParameter
 import org.javaruntype.type.Types
 import org.utbot.engine.greyboxfuzzer.util.*
 import org.utbot.engine.rawType
-import ru.vyarus.java.generics.resolver.context.GenericsContext
-import ru.vyarus.java.generics.resolver.context.GenericsInfo
-import ru.vyarus.java.generics.resolver.util.GenericsUtils
-import ru.vyarus.java.generics.resolver.util.TypeUtils
-import soot.Hierarchy
-import soot.Scene
 import sun.misc.Unsafe
 import sun.reflect.generics.reflectiveObjects.ParameterizedTypeImpl
 import sun.reflect.generics.reflectiveObjects.WildcardTypeImpl
 import java.lang.reflect.*
-import kotlin.random.Random
-import ru.vyarus.java.generics.resolver.context.container.ParameterizedTypeImpl as GParameterizedTypeImpl
 
 class UserClassesGenerator : ComponentizedGenerator<Any>(Any::class.java) {
 
     var clazz: Class<*>? = null
     var parameterTypeContext: ParameterTypeContext? = null
     var depth = 0
+    var generationMethod = GenerationMethod.ANY
 
     companion object {
         val UNSAFE = run {
@@ -58,6 +51,11 @@ class UserClassesGenerator : ComponentizedGenerator<Any>(Any::class.java) {
 
     private fun generateType(): Type {
         return Any::class.java.rawType
+    }
+
+    fun generate(random: SourceOfRandomness?, status: GenerationStatus?, generationMethod: GenerationMethod): Any? {
+        this.generationMethod = generationMethod
+        return generate(random, status)
     }
 
     override fun generate(random: SourceOfRandomness?, status: GenerationStatus?): Any? {
@@ -96,10 +94,16 @@ class UserClassesGenerator : ComponentizedGenerator<Any>(Any::class.java) {
         val gctx = createGenericsContext(resolvedJavaType, clazz!!)
         if (modifiers.and(Modifier.ABSTRACT) > 0 || modifiers.and(Modifier.INTERFACE) > 0) {
             return InterfaceImplementersGenerator.generateImplementerInstance(
-                resolvedJavaType, parameterTypeContext!!, depth
+                resolvedJavaType, parameterTypeContext!!, depth, generationMethod == GenerationMethod.UNSAFE
             )
         }
-        val typeOfGenerations = mutableListOf('c', 'c', 's', 'e', 'u')
+        val typeOfGenerations = when (generationMethod) {
+            GenerationMethod.CONSTRUCTOR -> mutableListOf('c')
+            GenerationMethod.STATIC -> mutableListOf('s')
+            GenerationMethod.STATIC_EXT -> mutableListOf('e')
+            GenerationMethod.UNSAFE -> mutableListOf('u')
+            else -> mutableListOf('c', 'c', 's', 'e', 'u')
+        }
         while (true) {
             val randomTypeOfGeneration = typeOfGenerations.randomOrNull() ?: return null
             val generatedInstance =
@@ -125,7 +129,11 @@ class UserClassesGenerator : ComponentizedGenerator<Any>(Any::class.java) {
                             null
                         }
                     }
-                    else -> InstancesGenerator.generateInstanceWithUnsafe(resolvedJavaType.toClass()!!, depth)
+                    else -> InstancesGenerator.generateInstanceWithUnsafe(
+                        resolvedJavaType.toClass()!!,
+                        depth,
+                        generationMethod == GenerationMethod.UNSAFE
+                    )
                 }
             generatedInstance?.let { return it } ?: typeOfGenerations.removeIf { it == randomTypeOfGeneration }
         }

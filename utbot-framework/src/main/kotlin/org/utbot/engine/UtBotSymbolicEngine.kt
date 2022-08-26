@@ -568,10 +568,16 @@ class UtBotSymbolicEngine(
         val clazz = methodUnderTest.clazz.java
         val myThisInstance =
             if (!methodUnderTest.isStatic) {
-                InstancesGenerator.generateInstanceWithUnsafe(clazz, 0)?.let {
-                    UtModelConstructor(IdentityHashMap()).construct(it, classIdForType(clazz))
-                } ?: thisInstance
-            } else thisInstance
+                InstancesGenerator.generateInstanceWithUnsafe(clazz, 0, true) ?: thisInstance
+            } else {
+                null
+            }
+//            if (!methodUnderTest.isStatic) {
+//                InstancesGenerator.generateInstanceWithUnsafe(clazz, 0, true)?.let {
+//                    println()
+//                    UtModelConstructor(IdentityHashMap()).construct(it, classIdForType(clazz))
+//                } ?: thisInstance
+//            } else thisInstance
 //        ThisInstanceGenerator.utModelThisInstance ?: thisInstance
 //        val myThisInstance = thisInstance
 

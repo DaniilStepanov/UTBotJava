@@ -13,7 +13,12 @@ import kotlin.random.Random
 
 object InterfaceImplementersGenerator {
 
-    fun generateImplementerInstance(resolvedType: Type, parameterTypeContext: ParameterTypeContext, depth: Int): Any? {
+    fun generateImplementerInstance(
+        resolvedType: Type,
+        parameterTypeContext: ParameterTypeContext,
+        depth: Int,
+        isRecursiveUnsafe: Boolean
+    ): Any? {
         //val sootMethod = SootStaticsCollector.getStaticInstancesOf(clazz!!).first()
         val staticGenerators = SootStaticsCollector.getStaticInstancesOf(parameterTypeContext.rawClass!!)
         if (staticGenerators.isNotEmpty() && Random.nextBoolean()) {
@@ -72,7 +77,9 @@ object InterfaceImplementersGenerator {
             return null
         }
         println("TRYING TO GENERATE instance of ${prevImplementer.name}")
-        val typeOfGenerations = mutableListOf('c', 'c', 's', 'u')
+        val typeOfGenerations =
+            if (isRecursiveUnsafe) mutableListOf('u')
+            else mutableListOf('c', 'c', 's', 'u')
         while (true) {
             val randomTypeOfGeneration = typeOfGenerations.randomOrNull() ?: return null
             println("TYPE OF GENERATION $randomTypeOfGeneration")
@@ -85,7 +92,11 @@ object InterfaceImplementersGenerator {
                         parameterTypeContext,
                         depth
                     )
-                    else -> InstancesGenerator.generateInstanceWithUnsafe(prevImplementer, depth)
+                    else -> if (isRecursiveUnsafe) {
+                        InstancesGenerator.generateInstanceWithUnsafe(prevImplementer, depth, true)
+                    } else {
+                        InstancesGenerator.generateInstanceWithUnsafe(prevImplementer, depth, false)
+                    }
                 }
             generatedInstance?.let { return it } ?: typeOfGenerations.removeIf { it == randomTypeOfGeneration }
         }

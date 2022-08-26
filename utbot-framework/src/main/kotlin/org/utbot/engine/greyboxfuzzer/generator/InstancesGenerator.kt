@@ -1,8 +1,5 @@
 package org.utbot.engine.greyboxfuzzer.generator
 
-import com.pholser.junit.quickcheck.generator.java.util.HashSetGenerator
-import com.pholser.junit.quickcheck.generator.java.util.LinkedHashSetGenerator
-import com.pholser.junit.quickcheck.generator.java.util.MapGenerator
 import com.pholser.junit.quickcheck.internal.ParameterTypeContext
 import org.javaruntype.type.Types
 import org.utbot.engine.greyboxfuzzer.util.*
@@ -295,7 +292,69 @@ object InstancesGenerator {
             depth
         )
 
-    fun generateInstanceWithUnsafe(clazz: Class<*>, depth: Int): Any? {
+    //    fun regenerateRandomFields(clazz: Class<*>, classInstance: Any, numOfFields: Int): Any? {
+//
+//    }
+    fun regenerateRandomFields(clazz: Class<*>, classInstance: Any): Any? {
+        val parameterTypeContext = ParameterTypeContext.forClass(clazz)
+        val fields = clazz.getAllDeclaredFields()
+            .filterNot { it.hasModifiers(Modifier.STATIC, Modifier.FINAL) }
+            .toMutableList()
+        repeat(Random.nextInt(0, 10)) {
+            val randomField = fields.randomOrNull() ?: return@repeat
+            if (Random.getTrue(20)) {
+                randomField.setDefaultValue(classInstance)
+            } else {
+                setNewFieldValue(randomField, parameterTypeContext, classInstance, 0, false)
+            }
+            fields.remove(randomField)
+        }
+        return classInstance
+    }
+
+    private fun setNewFieldValue(
+        field: Field,
+        parameterTypeContext: ParameterTypeContext,
+        clazzInstance: Any?,
+        depth: Int,
+        isRecursiveWithUnsafe: Boolean
+    ) {
+        if (field.hasModifiers(Modifier.STATIC, Modifier.FINAL)) return
+        field.isAccessible = true
+        val oldFieldValue = field.getFieldValue(clazzInstance)
+        if (field.hasAtLeastOneOfModifiers(Modifier.STATIC, Modifier.FINAL) && oldFieldValue != null) return
+        val fieldType = parameterTypeContext.getGenericContext().resolveFieldType(field)
+        println("F = $field TYPE = $fieldType OLDVALUE = $oldFieldValue")
+        val parameterTypeContextForResolvedType = createParameterTypeContext(
+            field.name,
+            field.annotatedType,
+            field.declaringClass.name,
+            Types.forJavaLangReflectType(fieldType),
+            parameterTypeContext.getGenericContext()
+        )
+        val generator = DataGeneratorSettings.generatorRepository.getOrProduceGenerator(
+            parameterTypeContextForResolvedType,
+            depth
+        ) ?: return
+        if (isRecursiveWithUnsafe) {
+            (listOf(generator) + generator.getAllComponents()).forEach {
+                if (it is UserClassesGenerator) it.generationMethod = GenerationMethod.UNSAFE
+            }
+        }
+        println("I GOT GENERATOR!! $generator")
+        val newFieldValue =
+            try {
+                generator.generate(DataGeneratorSettings.sourceOfRandomness, DataGeneratorSettings.genStatus)
+            } catch (e: Exception) {
+                null
+            }
+        println("NEW VALUE GENERATED!!")
+        if (newFieldValue != null) {
+            field.setFieldValue(clazzInstance, newFieldValue)
+        }
+    }
+
+    fun generateInstanceWithUnsafe(clazz: Class<*>, depth: Int, isRecursiveWithUnsafe: Boolean): Any? {
         println("TRYING TO GENERATE ${clazz.name} instance")
         if (depth >= DataGeneratorSettings.maxDepthOfGeneration) return null
         val clazzInstance =
@@ -307,40 +366,48 @@ object InstancesGenerator {
                 return null
             }
         val parameterTypeContext = ParameterTypeContext.forClass(clazz)
-        for (field in clazz.getAllDeclaredFields()) {
-            if (field.hasModifiers(Modifier.STATIC, Modifier.FINAL)) continue
-            field.isAccessible = true
-            val oldFieldValue = field.getFieldValue(clazzInstance)
-
-//            //TODO!! TEMPORARY
-//            if (oldFieldValue != null) continue
-
-            if (field.hasAtLeastOneOfModifiers(Modifier.FINAL, Modifier.STATIC) && oldFieldValue != null) continue
-            val fieldType = parameterTypeContext.getGenericContext().resolveFieldType(field)
-            println("F = $field TYPE = $fieldType OLDVALUE = $oldFieldValue")
-            val parameterTypeContextForResolvedType = createParameterTypeContext(
-                field.name,
-                field.annotatedType,
-                field.declaringClass.name,
-                Types.forJavaLangReflectType(fieldType),
-                parameterTypeContext.getGenericContext()
-            )
-            val generator = DataGeneratorSettings.generatorRepository.getOrProduceGenerator(
-                parameterTypeContextForResolvedType,
-                depth
-            )
-            println("I GOT GENERATOR!! $generator")
-            val newFieldValue =
-                try {
-                    generator?.generate(DataGeneratorSettings.sourceOfRandomness, DataGeneratorSettings.genStatus)
-                } catch (e: Exception) {
-                    null
-                }
-            println("NEW VALUE GENERATED!!")
-            if (newFieldValue != null) {
-                field.setFieldValue(clazzInstance, newFieldValue)
-            }
+        clazz.getAllDeclaredFields().forEach {
+            setNewFieldValue(it, parameterTypeContext, clazzInstance, depth, isRecursiveWithUnsafe)
         }
+//        for (field in clazz.getAllDeclaredFields()) {
+//            if (field.hasModifiers(Modifier.STATIC, Modifier.FINAL)) continue
+//            field.isAccessible = true
+//            val oldFieldValue = field.getFieldValue(clazzInstance)
+//
+////            //TODO!! TEMPORARY
+////            if (oldFieldValue != null) continue
+//
+//            if (field.hasAtLeastOneOfModifiers(Modifier.STATIC) && oldFieldValue != null) continue
+//            val fieldType = parameterTypeContext.getGenericContext().resolveFieldType(field)
+//            println("F = $field TYPE = $fieldType OLDVALUE = $oldFieldValue")
+//            val parameterTypeContextForResolvedType = createParameterTypeContext(
+//                field.name,
+//                field.annotatedType,
+//                field.declaringClass.name,
+//                Types.forJavaLangReflectType(fieldType),
+//                parameterTypeContext.getGenericContext()
+//            )
+//            val generator = DataGeneratorSettings.generatorRepository.getOrProduceGenerator(
+//                parameterTypeContextForResolvedType,
+//                depth
+//            ) ?: return null
+//            if (isRecursiveWithUnsafe) {
+//                (listOf(generator) + generator.getAllComponents()).forEach {
+//                    if (it is UserClassesGenerator) it.generationMethod = GenerationMethod.UNSAFE
+//                }
+//            }
+//            println("I GOT GENERATOR!! $generator")
+//            val newFieldValue =
+//                try {
+//                    generator.generate(DataGeneratorSettings.sourceOfRandomness, DataGeneratorSettings.genStatus)
+//                } catch (e: Exception) {
+//                    null
+//                }
+//            println("NEW VALUE GENERATED!!")
+//            if (newFieldValue != null) {
+//                field.setFieldValue(clazzInstance, newFieldValue)
+//            }
+//        }
         return clazzInstance
     }
 
