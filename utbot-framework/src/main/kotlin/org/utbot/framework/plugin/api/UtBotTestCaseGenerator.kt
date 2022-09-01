@@ -39,10 +39,14 @@ import mu.KotlinLogging
 import org.utbot.engine.*
 import org.utbot.engine.greyboxfuzzer.generator.ThisInstanceGenerator
 import org.utbot.engine.greyboxfuzzer.util.CoverageCollector
+import org.utbot.engine.greyboxfuzzer.util.CustomClassLoader
 import soot.Scene
 import soot.jimple.JimpleBody
 import soot.toolkits.graph.ExceptionalUnitGraph
+import java.net.URL
+import java.net.URLClassLoader
 import java.time.Duration
+import java.util.jar.JarFile
 import kotlin.reflect.jvm.jvmName
 import kotlin.reflect.jvm.kotlinFunction
 import kotlin.system.exitProcess
@@ -85,8 +89,21 @@ object UtBotTestCaseGenerator : TestCaseGenerator {
             System.setProperty(kotlinx.coroutines.DEBUG_PROPERTY_NAME, kotlinx.coroutines.DEBUG_PROPERTY_VALUE_OFF)
         }
 
+
+
+
         timeoutLogger.trace().bracket("Soot initialization") {
-            runSoot(buildDir, classpath)
+            val jarsPaths = classpath!!.split(":").filter { it.endsWith(".jar") }
+            for (jarPath in jarsPaths) {
+                val jarFile = JarFile(jarPath)
+                for (jarEntry in jarFile.entries()) {
+                    if (jarEntry.name.endsWith(".class")) {
+                        val className = jarEntry.name.dropLast(6).replace('/', '.')
+                        SootUtils.libraryClassesToLoad.add(className)
+                    }
+                }
+            }
+            SootUtils.runSoot(buildDir, classpath)
         }
 
         previousBuildDir = buildDir
@@ -263,7 +280,7 @@ object UtBotTestCaseGenerator : TestCaseGenerator {
                     controller.job = launch(currentUtContext) {
                         if (!isActive) return@launch
                         //TODO!! DO NOT FORGET TO REMOVE IT
-                        //if (!method.displayName.contains("searchColumnNumber")) return@launch
+                        //if (!method.displayName.contains("decodeUTF8")) return@launch
                         //yield one to
                         yield()
 

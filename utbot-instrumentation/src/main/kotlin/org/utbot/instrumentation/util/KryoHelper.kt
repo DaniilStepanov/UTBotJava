@@ -20,6 +20,12 @@ import java.lang.reflect.InvocationHandler
 import java.util.GregorianCalendar
 import org.objenesis.instantiator.ObjectInstantiator
 import org.objenesis.strategy.StdInstantiatorStrategy
+import sun.misc.Unsafe
+import sun.reflect.generics.reflectiveObjects.GenericArrayTypeImpl
+import sun.reflect.generics.reflectiveObjects.ParameterizedTypeImpl
+import java.lang.reflect.Field
+import java.lang.reflect.Modifier
+import java.lang.reflect.Type
 
 /**
  * Helpful class for working with the kryo.
@@ -89,7 +95,7 @@ class KryoHelper internal constructor(
 }
 
 // This kryo is used to initialize collections properly.
-internal class TunedKryo : Kryo() {
+class TunedKryo : Kryo() {
     init {
         this.references = true
         this.isRegistrationRequired = false
@@ -131,6 +137,12 @@ internal class TunedKryo : Kryo() {
         Protocol::class.nestedClasses.forEach {
             register(it.java)
         }
+    }
+
+    fun tryToSerialize(obj: Any) {
+        val temporaryBuffer = ByteArrayOutputStream()
+        val kryoOutput = Output(temporaryBuffer)
+        writeClassAndObject(kryoOutput, obj)
     }
 
     /**

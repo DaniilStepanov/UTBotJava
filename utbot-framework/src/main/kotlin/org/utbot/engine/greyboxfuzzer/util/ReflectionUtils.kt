@@ -1,5 +1,6 @@
 package org.utbot.engine.greyboxfuzzer.util
 
+import org.utbot.engine.greyboxfuzzer.generator.UserClassesGenerator
 import org.utbot.framework.codegen.model.constructor.tree.isStatic
 import sun.reflect.generics.reflectiveObjects.GenericArrayTypeImpl
 import sun.reflect.generics.reflectiveObjects.ParameterizedTypeImpl
@@ -10,6 +11,7 @@ import java.lang.reflect.Method
 import java.lang.reflect.Modifier
 import java.lang.reflect.Type
 import kotlin.random.Random
+import kotlin.system.exitProcess
 
 fun Class<*>.getAllDeclaredFields(): List<Field> {
     val res = mutableListOf<Field>()
@@ -21,6 +23,21 @@ fun Class<*>.getAllDeclaredFields(): List<Field> {
 
         }
         current = current.superclass
+    }
+    return res
+}
+
+fun Class<*>.getAllDeclaredFieldsRecursive(instance: Any): List<Pair<Any, Field>> {
+    val queue = ArrayDeque<Pair<Any, Field>>()
+    val res = mutableListOf<Pair<Any, Field>>()
+    this.getAllDeclaredFields().forEach { queue.add(instance to it) }
+    while (queue.isNotEmpty()) {
+        val curField = queue.removeFirst()
+        val fieldValue = curField.second.getFieldValue(curField.first)
+        if (fieldValue != null && res.all { it.second != curField.second }) {
+            res.add(curField)
+            curField.second.type.toClass()?.getAllDeclaredFields()?.forEach { queue.add(fieldValue to it) }
+        }
     }
     return res
 }
@@ -115,6 +132,7 @@ fun Field.setFieldValue(instance: Any?, fieldValue: Any?) {
 fun Field.setDefaultValue(instance: Any?) {
     val oldAccessibleFlag = this.isAccessible
     this.isAccessible = true
+    this.isFinal = false
     val fixedInstance =
         if (this.isStatic) {
             null
@@ -128,9 +146,22 @@ fun Field.setDefaultValue(instance: Any?) {
         Long::class.javaPrimitiveType -> this.setLong(fixedInstance, 0)
         Float::class.javaPrimitiveType -> this.setFloat(fixedInstance, 0.0f)
         Double::class.javaPrimitiveType -> this.setDouble(fixedInstance, 0.0)
-        else -> this.set(fixedInstance, null)
+        else -> try {
+            this.set(fixedInstance, null)
+        } catch (e: Throwable) {
+            setNullToFieldUsingUnsafe(this)
+        }
     }.also { this.isAccessible = oldAccessibleFlag }
 }
+
+private fun setNullToFieldUsingUnsafe(field: Field) {
+    if (field.isStatic) {
+        val cl = UserClassesGenerator.UNSAFE.staticFieldBase(field)
+        val offset = UserClassesGenerator.UNSAFE.staticFieldOffset(field)
+        UserClassesGenerator.UNSAFE.getAndSetObject(cl, offset, null)
+    }
+}
+
 fun Type.toClass(): Class<*>? =
     try {
         when (this) {

@@ -34,7 +34,21 @@ object InterfaceImplementersGenerator {
             sootClass.getImplementersOfWithChain(hierarchy)
                 ?.filter { it.all { !it.toString().contains("$") } }
                 ?.filter { it.last().isConcrete }
-        val randomImplementersChain = implementers?.randomOrNull()?.drop(1) ?: return null
+                ?.filter {
+                    val allocatedInstance =
+                        try {
+                            UserClassesGenerator.UNSAFE.allocateInstance(it.last().toJavaClass())
+                        } catch (e: Throwable) {
+                            null
+                        }
+                    allocatedInstance != null
+                }
+        val randomImplementersChain =
+            if (Random.getTrue(75)) {
+                implementers?.shuffled()?.minByOrNull { it.size }?.drop(1)
+            } else {
+                implementers?.randomOrNull()?.drop(1)
+            } ?: return null
         val generics = mutableListOf<Pair<Type, MutableList<Type>>>()
         var prevImplementer = sootClass.toJavaClass()
         (resolvedType as? ParameterizedTypeImpl)?.actualTypeArguments?.forEachIndexed { index, typeVariable ->
@@ -44,7 +58,6 @@ object InterfaceImplementersGenerator {
         }
         println("IMPLEMENTER = ${prevImplementer.name}")
         for (implementer in randomImplementersChain) {
-            println("HERE")
             val javaImplementer = implementer.toJavaClass()
             val extendType = javaImplementer.let { it.genericInterfaces + it.genericSuperclass }
                 .find { it.toClass() == prevImplementer }
@@ -62,7 +75,6 @@ object InterfaceImplementersGenerator {
                     }
                 }
         }
-        println("HERE1")
         val g = prevImplementer.typeParameters.map { tp -> tp.name to generics.find { it.second.last() == tp }?.first }
             .toMap()
         val actualTypeParams = prevImplementer.typeParameters.map { g[it.name] ?: return null }.toTypedArray()

@@ -2,9 +2,12 @@ package org.utbot.engine.greyboxfuzzer
 
 import com.pholser.junit.quickcheck.random.SourceOfRandomness
 import edu.berkeley.cs.jqf.fuzz.ei.ZestGuidance
+import org.utbot.engine.displayName
 import org.utbot.engine.executeConcretely
 import org.utbot.engine.greyboxfuzzer.generator.*
 import org.utbot.engine.greyboxfuzzer.util.CoverageCollector
+import org.utbot.engine.greyboxfuzzer.util.ZestUtils
+import org.utbot.engine.greyboxfuzzer.util.getAllDeclaredFields
 import org.utbot.engine.isStatic
 import org.utbot.external.api.classIdForType
 import org.utbot.framework.concrete.UtConcreteExecutionResult
@@ -14,21 +17,26 @@ import org.utbot.framework.plugin.api.*
 import org.utbot.framework.plugin.api.util.signature
 import org.utbot.framework.plugin.api.util.utContext
 import org.utbot.instrumentation.ConcreteExecutor
+import org.utbot.instrumentation.util.WritingToKryoException
 import soot.Scene
+import soot.jimple.internal.JAssignStmt
+import soot.jimple.internal.JInstanceFieldRef
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.ObjectInputStream
 import java.io.ObjectOutputStream
 import java.util.*
+import kotlin.reflect.KClass
 import kotlin.reflect.KFunction
 import kotlin.reflect.jvm.javaMethod
 import kotlin.reflect.jvm.jvmName
+import kotlin.system.exitProcess
 
 class ZestFuzzer(
     private val concreteExecutor: ConcreteExecutor<UtConcreteExecutionResult, UtExecutionInstrumentation>,
     private val methodUnderTest: UtMethod<*>,
     private val instrumentation: List<UtInstrumentation>,
-    private val thisInstance: Any?,
+    private var thisInstance: Any?,
 ) {
 
     /**
@@ -53,11 +61,25 @@ class ZestFuzzer(
                 val sig = it.bytecodeSignature.drop(1).dropLast(1).substringAfter("${clazz.jvmName}: ")
                 kfunction.javaMethod!!.signature == sig
             }
+//        val classFieldsUsedByFunc =
+//            sootMethod!!.activeBody.units
+//                .asSequence()
+//                .mapNotNull { it as? JAssignStmt }
+//                .map { it.rightBox.value }
+//                .mapNotNull { it as? JInstanceFieldRef }
+//                .mapNotNull { fieldRef -> clazz.java.getAllDeclaredFields().find { it.name == fieldRef.field.name } }
+//                .toSet()
+
         val methodLines = sootMethod!!.activeBody.units.map { it.javaSourceStartLineNumber }.filter { it != -1 }.toSet()
         var maxCoverage = 0
-        val repeatTimes = 100
+        val repeatTimes = 10
         repeat(repeatTimes) {
             println("EXECUTION NUMBER $it")
+            if (thisInstance != null) {
+//                InstancesGenerator.regenerateFields(clazz.java, thisInstance, classFieldsUsedByFunc.toList())
+//                ZestUtils.setUnserializableFieldsToNull(thisInstance)
+            }
+            println()
             val generatedParameters =
                 method.parameters.mapIndexed { index, parameter ->
                     DataGenerator.generate(
@@ -72,6 +94,7 @@ class ZestFuzzer(
                     UtNullModel(it.second)
                 } else {
                     try {
+                        ZestUtils.setUnserializableFieldsToNull(it.first!!.value)
                         UtModelConstructor(IdentityHashMap()).construct(it.first!!.value, it.second)
                     } catch (e: Throwable) {
                         UtNullModel(it.second)
@@ -79,22 +102,33 @@ class ZestFuzzer(
                 }
             }
             //TODO regenerate fiels of thisInstance
-            if (it != 0 && Random().nextBoolean() && thisInstance != null) {
-                InstancesGenerator.regenerateRandomFields(clazz.java, thisInstance)
-            }
-            val thisInstanceAsUtModel =
-                if (thisInstance != null) {
-                    UtModelConstructor(IdentityHashMap()).construct(thisInstance, classIdForType(clazz.java))
-                } else {
-                    if (methodUnderTest.isStatic) {
-                        null
-                    } else {
-                        UtNullModel(classIdForType(clazz.java))
-                    }
-                }
-            val initialEnvironmentModels = EnvironmentModels(thisInstanceAsUtModel, generatedParameterAsUtModel, mapOf())
+//            if (it != 0 && Random().nextBoolean() && thisInstance != null) {
+//                //InstancesGenerator.regenerateRandomFields(clazz.java, thisInstance)
+//            }
+            var thisInstanceAsUtModel = createUtModelFromThis(thisInstance, clazz.java)
+            val initialEnvironmentModels =
+                EnvironmentModels(thisInstanceAsUtModel, generatedParameterAsUtModel, mapOf())
             println("EXECUTING FUNCTION ${method.name}")
             try {
+//                while (true) {
+//                    try {
+//                        val tmpInitialEnvironmentModels =
+//                            EnvironmentModels(thisInstanceAsUtModel, generatedParameterAsUtModel, mapOf())
+//                        val executor =
+//                            ConcreteExecutor(
+//                                UtExecutionInstrumentation,
+//                                concreteExecutor.pathsToUserClasses,
+//                                concreteExecutor.pathsToDependencyClasses
+//                            ).apply { this.classLoader = utContext.classLoader }
+//                        executor.executeConcretely(methodUnderTest, tmpInitialEnvironmentModels, listOf())
+//                        break
+//                    } catch (e: WritingToKryoException) {
+//
+//                        thisInstanceAsUtModel = createUtModelFromThis(thisInstance, clazz.java)
+//                    } catch (e: Throwable) {
+//                        break
+//                    }
+//                }
                 val executor =
                     ConcreteExecutor(
                         UtExecutionInstrumentation,
@@ -112,6 +146,7 @@ class ZestFuzzer(
                     .map { it.lineNumber }
                     .toSet()
                 if (coveredMethodInstructions.size == methodLines.size) {
+                    println("I'M DONE WITH ${methodUnderTest.displayName}")
                     return sequenceOf()
                 }
 //                println("COVERAGE = ${coveredLines.size} $coveredLines")
@@ -122,7 +157,12 @@ class ZestFuzzer(
             } catch (e: Error) {
                 println("Error :(")
             } catch (e: Exception) {
-                println("Exception :( $e")
+                thisInstance = InstancesGenerator.generateInstanceWithUnsafe(clazz.java, 0, true)
+//                if (e is WritingToKryoException && thisInstance != null) {
+//                    tryToRepairThisInstance(thisInstance, generatedParameterAsUtModel, clazz)
+//                }
+                println("Exception in ${methodUnderTest.displayName} :( $e")
+                //exitProcess(0)
             }
             println("--------------------------------")
         }
@@ -130,6 +170,24 @@ class ZestFuzzer(
         return sequenceOf()
     }
 
+    private suspend fun tryToRepairThisInstance(
+        thisInstance: Any,
+        generatedParameterAsUtModel: List<UtModel>,
+        clazz: KClass<*>
+    ): Any {
+        val repairedThisInstance =
+            UtModelConstructor(IdentityHashMap()).construct(thisInstance, classIdForType(clazz.java))
+        val newInitialEnvironmentModels =
+            EnvironmentModels(repairedThisInstance, generatedParameterAsUtModel, mapOf())
+        val executor =
+            ConcreteExecutor(
+                UtExecutionInstrumentation,
+                concreteExecutor.pathsToUserClasses,
+                concreteExecutor.pathsToDependencyClasses
+            ).apply { this.classLoader = utContext.classLoader }
+        executor.executeConcretely(methodUnderTest, newInitialEnvironmentModels, listOf())
+        return thisInstance
+    }
 
     private fun mutateInput(oldData: Any, sourceOfRandomness: SourceOfRandomness): Any {
         val castedData = oldData as LongArray
@@ -178,4 +236,18 @@ class ZestFuzzer(
         println()
         return data
     }
+
+
+    private fun createUtModelFromThis(thisInstance: Any?, clazz: Class<*>): UtModel? =
+        if (thisInstance is UtModel) {
+            thisInstance
+        } else if (thisInstance != null) {
+            UtModelConstructor(IdentityHashMap()).construct(thisInstance, classIdForType(clazz))
+        } else {
+            if (methodUnderTest.isStatic) {
+                null
+            } else {
+                UtNullModel(classIdForType(clazz))
+            }
+        }
 }

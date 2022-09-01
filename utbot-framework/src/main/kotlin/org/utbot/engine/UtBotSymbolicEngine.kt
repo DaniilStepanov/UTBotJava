@@ -103,6 +103,7 @@ import org.utbot.engine.greyboxfuzzer.generator.DataGeneratorSettings
 import org.utbot.engine.greyboxfuzzer.generator.InstancesGenerator
 import org.utbot.engine.greyboxfuzzer.generator.ThisInstanceGenerator
 import org.utbot.engine.greyboxfuzzer.generator.getOrProduceGenerator
+import org.utbot.engine.greyboxfuzzer.util.*
 import org.utbot.external.api.classIdForType
 import org.utbot.framework.PathSelectorType
 import org.utbot.framework.UtSettings
@@ -148,6 +149,7 @@ import org.utbot.fuzzer.ModelProvider
 import org.utbot.fuzzer.FallbackModelProvider
 import org.utbot.fuzzer.collectConstantsForFuzzer
 import org.utbot.instrumentation.ConcreteExecutor
+import org.utbot.instrumentation.util.TunedKryo
 import soot.ArrayType
 import soot.BooleanType
 import soot.ByteType
@@ -237,6 +239,7 @@ import sun.reflect.generics.reflectiveObjects.GenericArrayTypeImpl
 import sun.reflect.generics.reflectiveObjects.ParameterizedTypeImpl
 import sun.reflect.generics.reflectiveObjects.TypeVariableImpl
 import sun.reflect.generics.reflectiveObjects.WildcardTypeImpl
+import java.io.ByteArrayOutputStream
 import java.lang.reflect.Method
 import java.lang.reflect.ParameterizedType
 import java.util.*
@@ -566,12 +569,17 @@ class UtBotSymbolicEngine(
         var attempts = UtSettings.fuzzingMaxAttemps
 
         val clazz = methodUnderTest.clazz.java
-        val myThisInstance =
+        var myThisInstance =
             if (!methodUnderTest.isStatic) {
+                //thisInstance
+                //InstancesGenerator.generateInstanceWithDefaultConstructorOrUnsafe(clazz)
                 InstancesGenerator.generateInstanceWithUnsafe(clazz, 0, true) ?: thisInstance
             } else {
                 null
             }
+        if (myThisInstance != null && !ZestUtils.setUnserializableFieldsToNull(myThisInstance)) {
+            myThisInstance = thisInstance
+        }
 //            if (!methodUnderTest.isStatic) {
 //                InstancesGenerator.generateInstanceWithUnsafe(clazz, 0, true)?.let {
 //                    println()

@@ -54,7 +54,7 @@ public class GraphAlgorithms<T extends Number> {
     }
 
 
-    public boolean testFunc3(Hashtable<A<? extends Number>, File> a) {
+    public boolean testFunc3(char[] ca, int[] sa) {
         int c = 0;
         for (Double aDouble : arr2) {
             c += 1 + aDouble.intValue();

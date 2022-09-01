@@ -295,7 +295,7 @@ object InstancesGenerator {
     //    fun regenerateRandomFields(clazz: Class<*>, classInstance: Any, numOfFields: Int): Any? {
 //
 //    }
-    fun regenerateRandomFields(clazz: Class<*>, classInstance: Any): Any? {
+    fun regenerateRandomFields(clazz: Class<*>, classInstance: Any) {
         val parameterTypeContext = ParameterTypeContext.forClass(clazz)
         val fields = clazz.getAllDeclaredFields()
             .filterNot { it.hasModifiers(Modifier.STATIC, Modifier.FINAL) }
@@ -309,7 +309,17 @@ object InstancesGenerator {
             }
             fields.remove(randomField)
         }
-        return classInstance
+    }
+
+    fun regenerateFields(clazz: Class<*>, classInstance: Any, fieldsToRegenerate: List<Field>) {
+        val parameterTypeContext = ParameterTypeContext.forClass(clazz)
+        for (field in fieldsToRegenerate) {
+            if (Random.getTrue(20)) {
+                field.setDefaultValue(classInstance)
+            } else {
+                setNewFieldValue(field, parameterTypeContext, classInstance, 0, false)
+            }
+        }
     }
 
     private fun setNewFieldValue(
@@ -350,6 +360,13 @@ object InstancesGenerator {
             }
         println("NEW VALUE GENERATED!!")
         if (newFieldValue != null) {
+            try {
+                println("NEW VALUE = ${newFieldValue} CLASS ${newFieldValue::class.java}")
+            } catch (e: Throwable) {
+                println("NEW VALUE OF CLASS ${newFieldValue::class.java} generated")
+            }
+        }
+        if (newFieldValue != null) {
             field.setFieldValue(clazzInstance, newFieldValue)
         }
     }
@@ -369,58 +386,20 @@ object InstancesGenerator {
         clazz.getAllDeclaredFields().forEach {
             setNewFieldValue(it, parameterTypeContext, clazzInstance, depth, isRecursiveWithUnsafe)
         }
-//        for (field in clazz.getAllDeclaredFields()) {
-//            if (field.hasModifiers(Modifier.STATIC, Modifier.FINAL)) continue
-//            field.isAccessible = true
-//            val oldFieldValue = field.getFieldValue(clazzInstance)
-//
-////            //TODO!! TEMPORARY
-////            if (oldFieldValue != null) continue
-//
-//            if (field.hasAtLeastOneOfModifiers(Modifier.STATIC) && oldFieldValue != null) continue
-//            val fieldType = parameterTypeContext.getGenericContext().resolveFieldType(field)
-//            println("F = $field TYPE = $fieldType OLDVALUE = $oldFieldValue")
-//            val parameterTypeContextForResolvedType = createParameterTypeContext(
-//                field.name,
-//                field.annotatedType,
-//                field.declaringClass.name,
-//                Types.forJavaLangReflectType(fieldType),
-//                parameterTypeContext.getGenericContext()
-//            )
-//            val generator = DataGeneratorSettings.generatorRepository.getOrProduceGenerator(
-//                parameterTypeContextForResolvedType,
-//                depth
-//            ) ?: return null
-//            if (isRecursiveWithUnsafe) {
-//                (listOf(generator) + generator.getAllComponents()).forEach {
-//                    if (it is UserClassesGenerator) it.generationMethod = GenerationMethod.UNSAFE
-//                }
-//            }
-//            println("I GOT GENERATOR!! $generator")
-//            val newFieldValue =
-//                try {
-//                    generator.generate(DataGeneratorSettings.sourceOfRandomness, DataGeneratorSettings.genStatus)
-//                } catch (e: Exception) {
-//                    null
-//                }
-//            println("NEW VALUE GENERATED!!")
-//            if (newFieldValue != null) {
-//                field.setFieldValue(clazzInstance, newFieldValue)
-//            }
-//        }
         return clazzInstance
     }
 
-//    private fun generateFieldValue(field: Field, gctx: GenericsContext, setAllObjectsToNull: Boolean, depth: Int): Any? =
-//        generateValueOfType(
-//            field,
-//            gctx,
-//            field.name,
-//            field.annotatedType,
-//            field.declaringClass.name,
-//            ParameterTypeContext.forField(field),
-//            setAllObjectsToNull,
-//            depth
-//        )
+    fun generateInstanceWithDefaultConstructorOrUnsafe(clazz: Class<*>): Any? {
+        val defaultConstructor = clazz.constructors.find { it.parameterCount == 0 }
+        return if (defaultConstructor != null) {
+            defaultConstructor.newInstance()
+        } else {
+            try {
+                UserClassesGenerator.UNSAFE.allocateInstance(clazz)
+            } catch (e: Throwable) {
+                null
+            }
+        }
+    }
 
 }

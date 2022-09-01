@@ -77,7 +77,7 @@ open class FallbackModelProvider(
         }
     }
 
-    private fun createSimpleModelByKClass(kclass: KClass<*>): UtModel {
+    fun createSimpleModelByKClass(kclass: KClass<*>): UtModel {
         val defaultConstructor = kclass.java.constructors.firstOrNull {
             it.parameters.isEmpty() && it.isPublic // check constructor is public
         }

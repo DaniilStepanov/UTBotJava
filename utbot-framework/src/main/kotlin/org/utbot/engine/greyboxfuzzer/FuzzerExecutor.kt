@@ -122,7 +122,7 @@ object SootUtils {
         val buildDirPath = buildDir.toPath()
 
         if (buildDirPath != previousBuildDir) {
-            runSoot(buildDirPath, null)
+            org.utbot.framework.plugin.api.SootUtils.runSoot(buildDirPath, null)
             previousBuildDir = buildDirPath
         }
     }
