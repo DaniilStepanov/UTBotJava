@@ -6,6 +6,7 @@ import org.utbot.engine.ResolvedModels
 import org.utbot.engine.isPrivate
 import org.utbot.engine.isPublic
 import org.utbot.framework.UtSettings
+import org.utbot.framework.codegen.model.util.isAccessibleFrom
 import org.utbot.framework.modifications.AnalysisMode.SettersAndDirectAccessors
 import org.utbot.framework.modifications.ConstructorAnalyzer
 import org.utbot.framework.modifications.ConstructorAssembleInfo
@@ -38,6 +39,7 @@ import org.utbot.framework.plugin.api.util.defaultValueModel
 import org.utbot.framework.plugin.api.util.executableId
 import org.utbot.framework.plugin.api.util.jClass
 import org.utbot.framework.util.nextModelName
+import java.lang.reflect.Constructor
 import java.util.IdentityHashMap
 
 /**
@@ -254,9 +256,14 @@ class AssembleModelGenerator(private val methodUnderTest: UtMethod<*>) {
                     if (fieldId.isFinal) {
                         throw AssembleException("Final field $fieldId can't be set in an object of the class $classId")
                     }
+                    if (!fieldId.type.isAccessibleFrom(methodPackageName)) {
+                        throw AssembleException(
+                            "Field $fieldId can't be set in an object of the class $classId because its type is inaccessible"
+                        )
+                    }
                     //fill field value if it hasn't been filled by constructor, and it is not default
                     if (fieldId in constructorInfo.affectedFields ||
-                        (fieldId !in constructorInfo.setFields && !fieldModel.hasDefaultValue())
+                            (fieldId !in constructorInfo.setFields && !fieldModel.hasDefaultValue())
                     ) {
                         val modifierCall = modifierCall(this, fieldId, assembleModel(fieldModel))
                         callChain.add(modifierCall)
@@ -350,21 +357,40 @@ class AssembleModelGenerator(private val methodUnderTest: UtMethod<*>) {
     /**
      * Finds most appropriate constructor in class.
      *
-     * We prefer constructor that allows to set more fields than others
+     * If the [compositeModel].fields is empty, we don't care about affected fields, we would like to take an empty
+     * constructor if the declaring class is from [java.util] package or an appropriate constructor with the least
+     * number of arguments.
+     *
+     * Otherwise, we prefer constructor that allows to set more fields than others
      * and use only simple assignments like "this.a = a".
      *
      * Returns null if no one appropriate constructor is found.
      */
     private fun findBestConstructorOrNull(compositeModel: UtCompositeModel): ConstructorId? {
         val classId = compositeModel.classId
-        if (!classId.isPublic || classId.isInner) return null
+        if (!classId.isVisible || classId.isInner) return null
 
-        return classId.jClass.declaredConstructors
-            .filter { it.isPublic || !it.isPrivate && it.declaringClass.packageName.startsWith(methodPackageName) }
-            .sortedByDescending { it.parameterCount }
+        val constructorIds = classId.jClass.declaredConstructors
+            .filter { it.isVisible }
             .map { it.executableId }
-            .firstOrNull { constructorAnalyzer.isAppropriate(it) }
+
+        return if (compositeModel.fields.isEmpty()) {
+            val fromUtilPackage = classId.packageName.startsWith("java.util")
+            constructorIds
+                .sortedBy { it.parameters.size }
+                .firstOrNull { it.parameters.isEmpty() && fromUtilPackage || constructorAnalyzer.isAppropriate(it) }
+        } else {
+            constructorIds
+                .sortedByDescending { it.parameters.size }
+                .firstOrNull { constructorAnalyzer.isAppropriate(it) }
+        }
     }
+
+    private val ClassId.isVisible : Boolean
+        get() = this.isPublic || !this.isPrivate && this.packageName.startsWith(methodPackageName)
+
+    private val Constructor<*>.isVisible : Boolean
+        get() = this.isPublic || !this.isPrivate && this.declaringClass.packageName.startsWith(methodPackageName)
 
     /**
      * Creates setter or direct setter call to set a field.

@@ -3,13 +3,18 @@ package org.utbot.framework.codegen.model.tree
 import org.utbot.common.WorkaroundReason
 import org.utbot.common.workaround
 import org.utbot.framework.codegen.Import
+import org.utbot.framework.codegen.model.constructor.tree.CgUtilClassConstructor
 import org.utbot.framework.codegen.model.constructor.tree.TestsGenerationReport
 import org.utbot.framework.codegen.model.util.CgExceptionHandler
+import org.utbot.framework.codegen.model.visitor.CgRendererContext
 import org.utbot.framework.codegen.model.visitor.CgVisitor
+import org.utbot.framework.codegen.model.visitor.utilMethodTextById
+import org.utbot.framework.plugin.api.BuiltinClassId
 import org.utbot.framework.plugin.api.ClassId
 import org.utbot.framework.plugin.api.ConstructorId
 import org.utbot.framework.plugin.api.DocClassLinkStmt
 import org.utbot.framework.plugin.api.DocCodeStmt
+import org.utbot.framework.plugin.api.DocCustomTagStatement
 import org.utbot.framework.plugin.api.DocMethodLinkStmt
 import org.utbot.framework.plugin.api.DocPreTagStatement
 import org.utbot.framework.plugin.api.DocRegularStmt
@@ -18,7 +23,7 @@ import org.utbot.framework.plugin.api.ExecutableId
 import org.utbot.framework.plugin.api.FieldId
 import org.utbot.framework.plugin.api.MethodId
 import org.utbot.framework.plugin.api.TypeParameters
-import org.utbot.framework.plugin.api.UtArrayModel
+import org.utbot.framework.plugin.api.UtModel
 import org.utbot.framework.plugin.api.util.booleanClassId
 import org.utbot.framework.plugin.api.util.id
 import org.utbot.framework.plugin.api.util.intClassId
@@ -30,8 +35,11 @@ interface CgElement {
     // TODO: order of cases is important here due to inheritance between some of the element types
     fun <R> accept(visitor: CgVisitor<R>): R = visitor.run {
         when (val element = this@CgElement) {
+            is CgRegularClassFile -> visit(element)
             is CgTestClassFile -> visit(element)
+            is CgRegularClass -> visit(element)
             is CgTestClass -> visit(element)
+            is CgRegularClassBody -> visit(element)
             is CgTestClassBody -> visit(element)
             is CgStaticsRegion -> visit(element)
             is CgSimpleRegion<*> -> visit(element)
@@ -51,6 +59,7 @@ interface CgElement {
             is CgMultilineComment -> visit(element)
             is CgDocumentationComment -> visit(element)
             is CgDocPreTagStatement -> visit(element)
+            is CgCustomTagStatement -> visit(element)
             is CgDocCodeStmt -> visit(element)
             is CgDocRegularStmt -> visit(element)
             is CgDocClassLinkStmt -> visit(element)
@@ -74,15 +83,16 @@ interface CgElement {
             is CgDeclaration -> visit(element)
             is CgAssignment -> visit(element)
             is CgTypeCast -> visit(element)
+            is CgIsInstance -> visit(element)
             is CgThisInstance -> visit(element)
-            //Not that order of variables is important
-            is CgNotNullVariable -> visit(element)
+            is CgNotNullAssertion -> visit(element)
             is CgVariable -> visit(element)
             is CgParameterDeclaration -> visit(element)
             is CgLiteral -> visit(element)
             is CgNonStaticRunnable -> visit(element)
             is CgStaticRunnable -> visit(element)
             is CgAllocateInitializedArray -> visit(element)
+            is CgArrayInitializer -> visit(element)
             is CgAllocateArray -> visit(element)
             is CgEnumConstantAccess -> visit(element)
             is CgFieldAccess -> visit(element)
@@ -108,30 +118,89 @@ interface CgElement {
 
 // Code entities
 
+sealed class AbstractCgClassFile<T : AbstractCgClass<*>> : CgElement {
+    abstract val imports: List<Import>
+    abstract val declaredClass: T
+}
+
+data class CgRegularClassFile(
+    override val imports: List<Import>,
+    override val declaredClass: CgRegularClass
+) : AbstractCgClassFile<CgRegularClass>()
+
 data class CgTestClassFile(
-    val imports: List<Import>,
-    val testClass: CgTestClass,
+    override val imports: List<Import>,
+    override val declaredClass: CgTestClass,
     val testsGenerationReport: TestsGenerationReport
-) : CgElement
+) : AbstractCgClassFile<CgTestClass>()
+
+sealed class AbstractCgClass<T : AbstractCgClassBody> : CgElement {
+    abstract val id: ClassId
+    abstract val annotations: List<CgAnnotation>
+    abstract val superclass: ClassId?
+    abstract val interfaces: List<ClassId>
+    abstract val body: T
+    abstract val isStatic: Boolean
+    abstract val isNested: Boolean
+
+    val packageName
+        get() = id.packageName
+
+    val simpleName
+        get() = id.simpleName
+}
+
+/**
+ * This class represents any class that we may want to generate other than the test class.
+ * At the moment the only such case is the generation of util class UtUtils.
+ *
+ * The difference with [CgTestClass] is in the body.
+ * The structure of a test class body is fixed (we know what it should contain),
+ * whereas an arbitrary class could contain anything.
+ * For example, the body of UtUtils class contains a comment with information
+ * about the version of UTBot it was generated with, and all the util methods.
+ *
+ * @see CgUtilClassConstructor
+ */
+class CgRegularClass(
+    override val id: ClassId,
+    override val annotations: List<CgAnnotation>,
+    override val superclass: ClassId?,
+    override val interfaces: List<ClassId>,
+    override val body: CgRegularClassBody,
+    override val isStatic: Boolean,
+    override val isNested: Boolean
+) : AbstractCgClass<CgRegularClassBody>()
 
 data class CgTestClass(
-    val id: ClassId,
-    val annotations: List<CgAnnotation>,
-    val superclass: ClassId?,
-    val interfaces: List<ClassId>,
-    val body: CgTestClassBody,
-) : CgElement {
-    val packageName = id.packageName
-    val simpleName = id.simpleName
-}
+    override val id: ClassId,
+    override val annotations: List<CgAnnotation>,
+    override val superclass: ClassId?,
+    override val interfaces: List<ClassId>,
+    override val body: CgTestClassBody,
+    override val isStatic: Boolean,
+    override val isNested: Boolean
+) : AbstractCgClass<CgTestClassBody>()
 
+
+sealed class AbstractCgClassBody : CgElement
+
+data class CgRegularClassBody(val content: List<CgElement>) : AbstractCgClassBody()
+
+/**
+ * Body of the test class.
+ * @property testMethodRegions regions containing the test methods
+ * @property staticDeclarationRegions regions containing static declarations.
+ * This is usually util methods and data providers.
+ * In Kotlin all static declarations must be grouped together in a companion object.
+ * In Java there is no such restriction, but for uniformity we are grouping
+ * Java static declarations together as well. It can also improve code readability.
+ */
 data class CgTestClassBody(
     val testMethodRegions: List<CgExecutableUnderTestCluster>,
-    val utilsRegion: List<CgRegion<CgElement>>
-) : CgElement {
-    val regions: List<CgRegion<*>>
-        get() = testMethodRegions
-}
+    val staticDeclarationRegions: List<CgStaticsRegion>,
+    val nestedClassRegions: List<CgRegion<CgTestClass>>
+) : AbstractCgClassBody()
 
 /**
  * A class representing the IntelliJ IDEA's regions.
@@ -150,7 +219,10 @@ open class CgSimpleRegion<T : CgElement>(
 ) : CgRegion<T>()
 
 /**
- * Stores data providers for parametrized tests and util methods
+ * A region that stores some static declarations, e.g. data providers or util methods.
+ * There may be more than one static region in a class and they all are stored
+ * in a [CgTestClassBody.staticDeclarationRegions].
+ * In case of Kotlin, they all will be rendered inside of a companion object.
  */
 class CgStaticsRegion(
     override val header: String?,
@@ -177,9 +249,20 @@ data class CgExecutableUnderTestCluster(
  * This is because util methods are hardcoded. On the rendering stage their text
  * is retrieved by their [MethodId].
  *
- * [id] identifier of the util method.
+ * @property id identifier of the util method.
  */
-data class CgUtilMethod(val id: MethodId) : CgElement
+data class CgUtilMethod(val id: MethodId) : CgElement {
+    internal fun getText(rendererContext: CgRendererContext): String {
+        // we should not throw an exception on failure here,
+        // because this function is used during rendering and
+        // exceptions can crash rendering, so we use an empty string if the text is not found
+        return with(rendererContext) {
+            rendererContext.utilMethodProvider
+                .utilMethodTextById(id, mockFrameworkUsed, mockFramework, codegenLanguage)
+                .getOrDefault("")
+        }
+    }
+}
 
 // Methods
 
@@ -223,9 +306,8 @@ class CgParameterizedTestDataProviderMethod(
     override val statements: List<CgStatement>,
     override val returnType: ClassId,
     override val annotations: List<CgAnnotation>,
+    override val exceptions: Set<ClassId>,
 ) : CgMethod(isStatic = true) {
-    override val exceptions: Set<ClassId> = emptySet()
-
     override val parameters: List<CgParameterDeclaration> = emptyList()
     override val documentation: CgDocumentationComment = CgDocumentationComment(emptyList())
     override val requiredFields: List<CgParameterDeclaration> = emptyList()
@@ -331,6 +413,11 @@ class CgDocPreTagStatement(content: List<CgDocStatement>) : CgDocTagStatement(co
     override fun hashCode(): Int = content.hashCode()
 }
 
+/**
+ * Represents a type for statements containing custom JavaDoc tags.
+ */
+data class CgCustomTagStatement(val statements: List<CgDocStatement>) : CgDocTagStatement(statements)
+
 class CgDocCodeStmt(val stmt: String) : CgDocStatement() {
     override fun isEmpty(): Boolean = stmt.isEmpty()
 
@@ -374,6 +461,10 @@ fun convertDocToCg(stmt: DocStatement): CgDocStatement {
         is DocPreTagStatement -> {
             val stmts = stmt.content.map { convertDocToCg(it) }
             CgDocPreTagStatement(content = stmts)
+        }
+        is DocCustomTagStatement -> {
+            val stmts = stmt.content.map { convertDocToCg(it) }
+            CgCustomTagStatement(statements = stmts)
         }
         is DocRegularStmt -> CgDocRegularStmt(stmt = stmt.stmt)
         is DocClassLinkStmt -> CgDocClassLinkStmt(className = stmt.className)
@@ -450,7 +541,7 @@ data class CgTryCatch(
 data class CgErrorWrapper(
     val message: String,
     val expression: CgExpression,
-): CgExpression {
+) : CgExpression {
     override val type: ClassId
         get() = expression.type
 }
@@ -521,6 +612,7 @@ interface CgExpression : CgStatement {
 }
 
 // marker interface representing expressions returning reference
+// TODO: it seems that not all [CgValue] implementations are reference expressions
 interface CgReferenceExpression : CgExpression
 
 /**
@@ -534,6 +626,16 @@ class CgTypeCast(
     val isSafetyCast: Boolean = false,
 ) : CgExpression {
     override val type: ClassId = targetType
+}
+
+/**
+ * Represents [java.lang.Class.isInstance] method.
+ */
+class CgIsInstance(
+    val classExpression: CgExpression,
+    val value: CgExpression,
+): CgExpression {
+    override val type: ClassId = booleanClassId
 }
 
 // Value
@@ -581,7 +683,22 @@ open class CgVariable(
  * - in Java it is an equivalent of [CgVariable]
  * - in Kotlin the difference is in addition of "!!" to the name
  */
-class CgNotNullVariable(name: String, type: ClassId) : CgVariable(name, type)
+class CgNotNullAssertion(val expression: CgExpression) : CgValue {
+    override val type: ClassId
+        get() = when (val expressionType = expression.type) {
+            is BuiltinClassId -> BuiltinClassId(
+                name = expressionType.name,
+                canonicalName = expressionType.canonicalName,
+                simpleName = expressionType.simpleName,
+                isNullable = false,
+            )
+            else -> ClassId(
+                expressionType.name,
+                expressionType.elementClassId,
+                isNullable = false,
+            )
+        }
+}
 
 /**
  * Method parameters declaration
@@ -604,6 +721,22 @@ data class CgParameterDeclaration(
     val type: ClassId
         get() = parameter.type
 }
+
+/**
+ * Test method parameter can be one of the following types:
+ * - this instance for method under test (MUT)
+ * - argument of MUT with a certain index
+ * - result expected from MUT with the given arguments
+ * - exception expected from MUT with the given arguments
+ */
+sealed class CgParameterKind {
+    object ThisInstance : CgParameterKind()
+    data class Argument(val index: Int) : CgParameterKind()
+    data class Statics(val model: UtModel) : CgParameterKind()
+    object ExpectedResult : CgParameterKind()
+    object ExpectedException : CgParameterKind()
+}
+
 
 // Primitive and String literals
 
@@ -628,7 +761,7 @@ class CgLiteral(override val type: ClassId, val value: Any?) : CgValue {
 }
 
 // Runnable like this::toString or (new Object())::toString (non-static) or Random::nextRandomInt (static) etc
-abstract class CgRunnable(override val type: ClassId, val methodId: MethodId): CgValue
+abstract class CgRunnable(override val type: ClassId, val methodId: MethodId) : CgValue
 
 /**
  * [referenceExpression] is "this" in this::toString or (new Object()) in (new Object())::toString (non-static)
@@ -637,18 +770,23 @@ class CgNonStaticRunnable(
     type: ClassId,
     val referenceExpression: CgReferenceExpression,
     methodId: MethodId
-): CgRunnable(type, methodId)
+) : CgRunnable(type, methodId)
 
 /**
  * [classId] is Random is Random::nextRandomInt (static) etc
  */
-class CgStaticRunnable(type: ClassId, val classId: ClassId, methodId: MethodId): CgRunnable(type, methodId)
+class CgStaticRunnable(type: ClassId, val classId: ClassId, methodId: MethodId) : CgRunnable(type, methodId)
 
 // Array allocation
 
-open class CgAllocateArray(type: ClassId, elementType: ClassId, val size: Int)
-    : CgReferenceExpression {
-    override val type: ClassId by lazy { CgClassId(type.name, updateElementType(elementType), isNullable = type.isNullable) }
+open class CgAllocateArray(type: ClassId, elementType: ClassId, val size: Int) : CgReferenceExpression {
+    override val type: ClassId by lazy {
+        CgClassId(
+            type.name,
+            updateElementType(elementType),
+            isNullable = type.isNullable
+        )
+    }
     val elementType: ClassId by lazy {
         workaround(WorkaroundReason.ARRAY_ELEMENT_TYPES_ALWAYS_NULLABLE) {
             // for now all array element types are nullable
@@ -664,13 +802,24 @@ open class CgAllocateArray(type: ClassId, elementType: ClassId, val size: Int)
         }
 }
 
-class CgAllocateInitializedArray(val model: UtArrayModel)
-    : CgAllocateArray(model.classId, model.classId.elementClassId!!, model.length)
+/**
+ * Allocation of an array with initialization. For example: `new String[] {"a", "b", null}`.
+ */
+class CgAllocateInitializedArray(val initializer: CgArrayInitializer) :
+    CgAllocateArray(initializer.arrayType, initializer.elementType, initializer.size)
+
+class CgArrayInitializer(val arrayType: ClassId, val elementType: ClassId, val values: List<CgExpression>) : CgExpression {
+    val size: Int
+        get() = values.size
+
+    override val type: ClassId
+        get() = arrayType
+}
 
 
 // Spread operator (for Kotlin, empty for Java)
 
-class CgSpread(override val type: ClassId, val array: CgExpression): CgExpression
+class CgSpread(override val type: ClassId, val array: CgExpression) : CgExpression
 
 // Enum constant
 

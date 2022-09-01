@@ -2,7 +2,7 @@
 
 Utbot Maven Plugin is a maven plugin for generating tests and creating SARIF-reports.
 
-The `createSarifReport` maven task generates tests and SARIF-reports for all classes in your project (or only for classes specified in the configuration).
+The `generateTestsAndSarifReport` maven task generates tests and SARIF-reports for all classes in your project (or only for classes specified in the configuration).
 In addition, it creates one big SARIF-report containing the results from all the processed files.
 
 
@@ -23,7 +23,7 @@ _TODO: The plugin has not been published yet._
   </build>
   ```
 
-- Run maven task `utbot:createSarifReport` to create a report.
+- Run maven task `utbot:generateTestsAndSarifReport` to create a report.
 
 
 ### How to configure
@@ -40,11 +40,12 @@ For example, the following configuration may be used:
     <generatedTestsRelativeRoot>target/generated/test</generatedTestsRelativeRoot>
     <sarifReportsRelativeRoot>target/generated/sarif</sarifReportsRelativeRoot>
     <markGeneratedTestsDirectoryAsTestSourcesRoot>true</markGeneratedTestsDirectoryAsTestSourcesRoot>
+    <testPrivateMethods>false</testPrivateMethods>
     <testFramework>junit5</testFramework>
     <mockFramework>mockito</mockFramework>
     <generationTimeout>60000L</generationTimeout>
     <codegenLanguage>java</codegenLanguage>
-    <mockStrategy>package-based</mockStrategy>
+    <mockStrategy>other-packages</mockStrategy>
     <staticsMocking>mock-statics</staticsMocking>
     <forceStaticMocking>force</forceStaticMocking>
     <classesToMockAlways>
@@ -79,6 +80,10 @@ For example, the following configuration may be used:
     - Mark the directory with generated tests as `test sources root` or not.
     - By default, `true` is used.
 
+- `testPrivateMethods`&ndash;
+    - Generate tests for private methods or not.
+    - By default, `false` is used.
+
 - `testFramework` &ndash;
     - The name of the test framework to be used.
     - Can be one of:
@@ -104,9 +109,9 @@ For example, the following configuration may be used:
 - `mockStrategy` &ndash;
     - The mock strategy to be used.
     - Can be one of:
-        - `'do-not-mock'` &ndash; do not use mock frameworks at all
-        - `'package-based'` &ndash; mock all classes outside the current package except system ones _(by default)_
-        - `'all-except-cut'` &ndash; mock all classes outside the class under test except system ones
+        - `'no-mocks'` &ndash; do not use mock frameworks at all
+        - `'other-packages'` &ndash; mock all classes outside the current package except system ones _(by default)_
+        - `'other-classes'` &ndash; mock all classes outside the class under test except system ones
 
 - `staticsMocking` &ndash;
     - Use static methods mocking or not.
@@ -136,8 +141,8 @@ you need to do the following:
 
 ### How to configure the log level
 
-To change the log level run the `createSarifReport` task with the appropriate flag.
+To change the log level run the `generateTestsAndSarifReport` task with the appropriate flag.
 
-For example, `mvn utbot:createSarifReport --debug`
+For example, `mvn utbot:generateTestsAndSarifReport --debug`
 
 Note that the internal maven log information will also be shown.

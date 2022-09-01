@@ -1,28 +1,43 @@
 package org.utbot.framework
 
-import org.utbot.common.PathUtil.toPath
-import java.io.FileInputStream
-import java.io.IOException
-import java.util.Properties
-import kotlin.properties.PropertyDelegateProvider
-import kotlin.reflect.KProperty
 import mu.KotlinLogging
+import org.utbot.common.AbstractSettings
+import kotlin.reflect.KProperty
 
 private val logger = KotlinLogging.logger {}
 
 /**
+ * Path to the utbot home folder.
+ */
+internal val utbotHomePath = "${System.getProperty("user.home")}/.utbot"
+
+/**
  * Default path for properties file
  */
-internal val defaultSettingsPath = "${System.getProperty("user.home")}/.utbot/settings.properties"
-internal const val defaultKeyForSettingsPath = "utbot.settings.path"
+private val defaultSettingsPath = "$utbotHomePath/settings.properties"
+private const val defaultKeyForSettingsPath = "utbot.settings.path"
 
-internal class SettingDelegate<T>(val initializer: () -> T) {
+/**
+ * Stores current values for each setting from [UtSettings].
+ */
+private val settingsValues: MutableMap<KProperty<*>, Any?> = mutableMapOf()
+
+internal class SettingDelegate<T>(val property: KProperty<*>, val initializer: () -> T) {
     private var value = initializer()
+
+    init {
+        updateSettingValue()
+    }
 
     operator fun getValue(thisRef: Any?, property: KProperty<*>): T = value
 
     operator fun setValue(thisRef: Any?, property: KProperty<*>, value: T) {
         this.value = value
+        updateSettingValue()
+    }
+
+    private fun updateSettingValue() {
+        settingsValues[property] = value
     }
 }
 
@@ -31,45 +46,9 @@ internal class SettingDelegate<T>(val initializer: () -> T) {
  */
 const val DEFAULT_CONCRETE_EXECUTION_TIMEOUT_IN_CHILD_PROCESS_MS = 1000L
 
-object UtSettings {
-    private val properties = Properties().also { props ->
-        val settingsPath = System.getProperty(defaultKeyForSettingsPath) ?: defaultSettingsPath
-        val settingsPathFile = settingsPath.toPath().toFile()
-        if (settingsPathFile.exists()) {
-            try {
-                FileInputStream(settingsPathFile).use { reader ->
-                    props.load(reader)
-                }
-            } catch (e: IOException) {
-                logger.info(e) { e.message }
-            }
-        }
-    }
-
-    private fun <T> getProperty(
-        defaultValue: T,
-        converter: (String) -> T
-    ): PropertyDelegateProvider<UtSettings, SettingDelegate<T>> {
-        return PropertyDelegateProvider { _, prop ->
-            SettingDelegate {
-                try {
-                    properties.getProperty(prop.name)?.let(converter) ?: defaultValue
-                } catch (e: Throwable) {
-                    logger.info(e) { e.message }
-                    defaultValue
-                } finally {
-                    properties.putIfAbsent(prop.name, defaultValue.toString())
-                }
-            }
-        }
-    }
-
-    private fun getBooleanProperty(defaultValue: Boolean) = getProperty(defaultValue, String::toBoolean)
-    private fun getIntProperty(defaultValue: Int) = getProperty(defaultValue, String::toInt)
-    private fun getLongProperty(defaultValue: Long) = getProperty(defaultValue, String::toLong)
-    private fun getStringProperty(defaultValue: String) = getProperty(defaultValue) { it }
-    private inline fun <reified T : Enum<T>> getEnumProperty(defaultValue: T) = getProperty(defaultValue) { enumValueOf(it) }
-
+object UtSettings : AbstractSettings(
+    logger, defaultKeyForSettingsPath, defaultSettingsPath
+) {
 
     /**
      * Setting to disable coroutines debug explicitly.
@@ -107,6 +86,16 @@ object UtSettings {
      * Type of path selector
      */
     var pathSelectorType: PathSelectorType by getEnumProperty(PathSelectorType.INHERITORS_SELECTOR)
+
+    /**
+     * Type of nnRewardGuidedSelector
+     */
+    var nnRewardGuidedSelectorType: NNRewardGuidedSelectorType by getEnumProperty(NNRewardGuidedSelectorType.WITHOUT_RECALCULATION)
+
+    /**
+     * Type of [StateRewardPredictor]
+     */
+    var stateRewardPredictorType: StateRewardPredictorType by getEnumProperty(StateRewardPredictorType.BASE)
 
     /**
      * Steps limit for path selector.
@@ -152,9 +141,14 @@ object UtSettings {
     /*
     * Activate or deactivate tests on comments && names/displayNames
     * */
-    var testSummary by getBooleanProperty( true)
+    var testSummary by getBooleanProperty(true)
     var testName by getBooleanProperty(true)
     var testDisplayName by getBooleanProperty(true)
+
+    /**
+     * Generate summaries using plugin's custom JavaDoc tags.
+     */
+    var useCustomJavaDocTags by getBooleanProperty(false)
 
     /**
      * Enable the machine learning module to generate summaries for methods under test.
@@ -165,19 +159,26 @@ object UtSettings {
     var enableMachineLearningModule by getBooleanProperty(true)
 
     /**
-     * Options below regulate which NullPointerExceptions check should be performed.
+     * Options below regulate which [NullPointerException] check should be performed.
      *
      * Set an option in true if you want to perform NPE check in the corresponding situations, otherwise set false.
      */
     var checkNpeInNestedMethods by getBooleanProperty(true)
     var checkNpeInNestedNotPrivateMethods by getBooleanProperty(false)
-    var checkNpeForFinalFields by getBooleanProperty(false)
+
+    /**
+     * This option determines whether we should generate [NullPointerException] checks for final or non-public fields
+     * in non-application classes. Set by true, this option highly decreases test's readability in some cases
+     * because of using reflection API for setting final/non-public fields in non-application classes.
+     *
+     * NOTE: default false value loses some executions with NPE in system classes, but often most of these executions
+     * are not expected by user.
+     */
+    var maximizeCoverageUsingReflection by getBooleanProperty(false)
 
     /**
      * Activate or deactivate substituting static fields values set in static initializer
      * with symbolic variable to try to set them another value than in initializer.
-     *
-     * We should not try to substitute in parametrized tests, for example
      */
     var substituteStaticsWithSymbolicVariable by getBooleanProperty(true)
 
@@ -235,12 +236,17 @@ object UtSettings {
     /**
      * Set to true to start fuzzing if symbolic execution haven't return anything
      */
-    var useFuzzing: Boolean by getBooleanProperty(false)
+    var useFuzzing: Boolean by getBooleanProperty(true)
 
     /**
      * Set the total attempts to improve coverage by fuzzer.
      */
-    var fuzzingMaxAttemps: Int by getIntProperty(Int.MAX_VALUE)
+    var fuzzingMaxAttempts: Int by getIntProperty(Int.MAX_VALUE)
+
+    /**
+     * Fuzzer tries to generate and run tests during this time.
+     */
+    var fuzzingTimeoutInMillis: Long by getLongProperty(3_000L)
 
     /**
      * Generate tests that treat possible overflows in arithmetic operations as errors
@@ -264,7 +270,17 @@ object UtSettings {
     /**
      * Timeout for specific concrete execution (in milliseconds).
      */
-    var concreteExecutionTimeoutInChildProcess: Long by getLongProperty(DEFAULT_CONCRETE_EXECUTION_TIMEOUT_IN_CHILD_PROCESS_MS)
+    var concreteExecutionTimeoutInChildProcess: Long by getLongProperty(
+        DEFAULT_CONCRETE_EXECUTION_TIMEOUT_IN_CHILD_PROCESS_MS
+    )
+
+    /**
+     * Determines whether should errors from a child process be written to a log file or suppressed.
+     * Note: being enabled, this option can highly increase disk usage when using ContestEstimator.
+     *
+     * False by default (for saving disk space).
+     */
+    var logConcreteExecutionErrors by getBooleanProperty(false)
 
     /**
      * Number of branch instructions using for clustering executions in the test minimization phase.
@@ -286,19 +302,160 @@ object UtSettings {
      */
     var enableUnsatCoreCalculationForHardConstraints by getBooleanProperty(false)
 
-    override fun toString(): String =
-        properties
-            .entries
-            .sortedBy { it.key.toString() }
-            .joinToString(separator = System.lineSeparator()) { "\t${it.key}=${it.value}" }
+    /**
+     * Enable it to process states with unknown solver status
+     * from the queue to concrete execution.
+     *
+     * True by default.
+     */
+    var processUnknownStatesDuringConcreteExecution by getBooleanProperty(true)
+
+    /**
+     * 2^{this} will be the length of observed subpath.
+     * See [SubpathGuidedSelector]
+     */
+    var subpathGuidedSelectorIndex by getIntProperty(1)
+
+    /**
+     * Set of indexes, which will use [SubpathGuidedSelector] in not single mode
+     */
+    var subpathGuidedSelectorIndexes = listOf(0, 1, 2, 3)
+
+    /**
+     * Flag that indicates whether feature processing for execution states enabled or not
+     */
+    var enableFeatureProcess by getBooleanProperty(false)
+
+    /**
+     * Path to deserialized reward models
+     */
+    var rewardModelPath by getStringProperty("../models/0")
+
+    /**
+     * Full class name of the class containing the configuration for the ML models to solve path selection task.
+     */
+    var analyticsConfigurationClassPath by getStringProperty("org.utbot.AnalyticsConfiguration")
+
+    /**
+     * Number of model iterations that will be used during ContestEstimator
+     */
+    var iterations by getIntProperty(1)
+
+    /**
+     * Path for state features dir
+     */
+    var featurePath by getStringProperty("eval/secondFeatures/antlr/INHERITORS_SELECTOR")
+
+    /**
+     * Counter for tests during testGeneration for one project in ContestEstimator
+     */
+    var testCounter by getIntProperty(0)
+
+    /**
+     * Flag for Subpath and NN selectors whether they are combined (Subpath use several indexes, NN use several models)
+     */
+    var singleSelector by getBooleanProperty(true)
+
+    /**
+     * Flag that indicates whether tests for synthetic methods (values, valueOf in enums) should be generated, or not
+     */
+    var skipTestGenerationForSyntheticMethods by getBooleanProperty(true)
+
+    /**
+     * Flag that indicates whether should we branch on and set static fields from trusted libraries or not.
+     *
+     * @see [org.utbot.common.WorkaroundReason.IGNORE_STATICS_FROM_TRUSTED_LIBRARIES]
+     */
+    var ignoreStaticsFromTrustedLibraries by getBooleanProperty(true)
+
+    /**
+     * Disable sandbox in the concrete executor. All unsafe/dangerous calls will be permitted.
+     */
+    var disableSandbox by getBooleanProperty(false)
+
 }
 
+/**
+ * Type of [BasePathSelector]. For each value see class in comment
+ */
 enum class PathSelectorType {
+    /**
+     * [CoveredNewSelector]
+     */
     COVERED_NEW_SELECTOR,
-    INHERITORS_SELECTOR
+
+    /**
+     * [InheritorsSelector]
+     */
+    INHERITORS_SELECTOR,
+
+    /**
+     * [SubpathGuidedSelector]
+     */
+    SUBPATH_GUIDED_SELECTOR,
+
+    /**
+     * [CPInstSelector]
+     */
+    CPI_SELECTOR,
+
+    /**
+     * [ForkDepthSelector]
+     */
+    FORK_DEPTH_SELECTOR,
+
+    /**
+     * [NNRewardGuidedSelector]
+     */
+    NN_REWARD_GUIDED_SELECTOR,
+
+    /**
+     * [RandomSelector]
+     */
+    RANDOM_SELECTOR,
+
+    /**
+     * [RandomPathSelector]
+     */
+    RANDOM_PATH_SELECTOR
 }
 
 enum class TestSelectionStrategyType {
     DO_NOT_MINIMIZE_STRATEGY, // Always adds new test
     COVERAGE_STRATEGY // Adds new test only if it increases coverage
+}
+
+/**
+ * Enum to specify [NNRewardGuidedSelector], see implementations for more details
+ */
+enum class NNRewardGuidedSelectorType {
+    /**
+     * [NNRewardGuidedSelectorWithRecalculation]
+     */
+    WITH_RECALCULATION,
+
+    /**
+     * [NNRewardGuidedSelectorWithoutRecalculation]
+     */
+    WITHOUT_RECALCULATION
+}
+
+/**
+ * Enum to specify [StateRewardPredictor], see implementations for details
+ */
+enum class StateRewardPredictorType {
+    /**
+     * [NNStateRewardPredictorBase]
+     */
+    BASE,
+
+    /**
+     * [StateRewardPredictorTorch]
+     */
+    TORCH,
+
+    /**
+     * [NNStateRewardPredictorBase]
+     */
+    LINEAR
 }

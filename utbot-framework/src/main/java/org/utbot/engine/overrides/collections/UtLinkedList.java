@@ -13,12 +13,16 @@ import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 import java.util.function.UnaryOperator;
+import java.util.stream.Stream;
+
 import org.jetbrains.annotations.NotNull;
+import org.utbot.engine.overrides.stream.UtStream;
 
 import static org.utbot.api.mock.UtMock.assume;
 import static org.utbot.engine.ResolverKt.MAX_LIST_SIZE;
 import static org.utbot.engine.overrides.UtOverrideMock.alreadyVisited;
 import static org.utbot.engine.overrides.UtOverrideMock.executeConcretely;
+import static org.utbot.api.mock.UtMock.assumeOrExecuteConcretely;
 import static org.utbot.engine.overrides.UtOverrideMock.parameter;
 import static org.utbot.engine.overrides.UtOverrideMock.visit;
 
@@ -68,7 +72,7 @@ public class UtLinkedList<E> extends AbstractSequentialList<E>
      * <li> elementData is marked as parameter </li>
      * <li> elementData.storage and it's elements are marked as parameters </li>
      */
-    private void preconditionCheck() {
+    protected void preconditionCheck() {
         if (alreadyVisited(this)) {
             return;
         }
@@ -79,18 +83,18 @@ public class UtLinkedList<E> extends AbstractSequentialList<E>
         parameter(elementData.storage);
         assume(elementData.begin == 0);
         assume(elementData.end >= 0);
-        assume(elementData.end <= MAX_LIST_SIZE);
+        assumeOrExecuteConcretely(elementData.end <= MAX_LIST_SIZE);
 
         visit(this);
     }
 
-    private void rangeCheck(int index) {
+    protected void rangeCheck(int index) {
         if (index < 0 || index >= elementData.end - elementData.begin) {
             throw new IndexOutOfBoundsException();
         }
     }
 
-    private void rangeCheckForAdd(int index) {
+    protected void rangeCheckForAdd(int index) {
         if (index < 0 || index > elementData.end - elementData.begin) {
             throw new IndexOutOfBoundsException();
         }
@@ -447,6 +451,29 @@ public class UtLinkedList<E> extends AbstractSequentialList<E>
         preconditionCheck();
         return new ReverseIteratorWrapper(elementData.end);
     }
+
+    @SuppressWarnings("unchecked")
+    @Override
+    public Stream<E> stream() {
+        preconditionCheck();
+
+        int size = elementData.end;
+        Object[] data = elementData.toArray(0, size);
+
+        return new UtStream<>((E[]) data, size);
+    }
+
+    @SuppressWarnings("unchecked")
+    @Override
+    public Stream<E> parallelStream() {
+        preconditionCheck();
+
+        int size = elementData.end;
+        Object[] data = elementData.toArray(0, size);
+
+        return new UtStream<>((E[]) data, size);
+    }
+
     public class ReverseIteratorWrapper implements ListIterator<E> {
 
         int index;

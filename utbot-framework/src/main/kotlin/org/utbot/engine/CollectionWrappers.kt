@@ -8,6 +8,7 @@ import org.utbot.engine.overrides.collections.UtGenericStorage
 import org.utbot.engine.overrides.collections.UtHashMap
 import org.utbot.engine.overrides.collections.UtHashSet
 import org.utbot.engine.overrides.collections.UtLinkedList
+import org.utbot.engine.overrides.collections.UtLinkedListWithNullableCheck
 import org.utbot.engine.pc.UtAddrExpression
 import org.utbot.engine.pc.UtExpression
 import org.utbot.engine.pc.select
@@ -22,10 +23,10 @@ import org.utbot.framework.plugin.api.UtCompositeModel
 import org.utbot.framework.plugin.api.UtExecutableCallModel
 import org.utbot.framework.plugin.api.UtModel
 import org.utbot.framework.plugin.api.UtNullModel
-import org.utbot.framework.plugin.api.UtReferenceModel
 import org.utbot.framework.plugin.api.UtStatementModel
 import org.utbot.framework.plugin.api.classId
-import org.utbot.framework.plugin.api.graph
+import org.utbot.framework.plugin.api.getIdOrThrow
+import org.utbot.framework.util.graph
 import org.utbot.framework.plugin.api.id
 import org.utbot.framework.plugin.api.util.booleanClassId
 import org.utbot.framework.plugin.api.util.constructorId
@@ -33,7 +34,6 @@ import org.utbot.framework.plugin.api.util.id
 import org.utbot.framework.plugin.api.util.methodId
 import org.utbot.framework.plugin.api.util.objectClassId
 import org.utbot.framework.util.nextModelName
-import java.util.LinkedList
 import soot.IntType
 import soot.RefType
 import soot.Scene
@@ -50,7 +50,7 @@ abstract class BaseOverriddenWrapper(protected val overriddenClassName: String) 
      *
      * @see invoke
      */
-    protected abstract fun UtBotSymbolicEngine.overrideInvoke(
+    protected abstract fun Traverser.overrideInvoke(
         wrapper: ObjectValue,
         method: SootMethod,
         parameters: List<SymbolicValue>
@@ -65,16 +65,15 @@ abstract class BaseOverriddenWrapper(protected val overriddenClassName: String) 
      *
      * Multiple GraphResults are returned because, we shouldn't substitute invocation of specified
      * that was called inside substituted method of object with the same address as specified [wrapper].
-     * (For example UtArrayList.<init> invokes AbstractList.<init> that also leads to UtBotSymbolicEngine.invoke,
+     * (For example UtArrayList.<init> invokes AbstractList.<init> that also leads to [Traverser.invoke],
      * and shouldn't be substituted with UtArrayList.<init> again). Only one GraphResult is valid, that is
      * guaranteed by contradictory to each other sets of constraints, added to them.
      */
-    override fun UtBotSymbolicEngine.invoke(
+    override fun Traverser.invoke(
         wrapper: ObjectValue,
         method: SootMethod,
         parameters: List<SymbolicValue>
     ): List<InvokeResult> {
-
         val methodResults = overrideInvoke(wrapper, method, parameters)
         if (methodResults != null) {
             return methodResults
@@ -84,35 +83,57 @@ abstract class BaseOverriddenWrapper(protected val overriddenClassName: String) 
             return listOf(GraphResult(method.jimpleBody().graph()))
         }
 
-        val overriddenMethod = overriddenClass.findMethodOrNull(method.subSignature)
+        // We need to find either an override from the class (for example, implementation
+        // of the method from the wrapper) or a method from its ancestors.
+        // Note that the method from the ancestor might have substitutions as well.
+        // I.e., it is `toString` method for `UtArrayList` that is defined in
+        // `AbstractCollection` and has its own overridden implementation.
+        val overriddenMethod = overriddenClass
+            .findMethodOrNull(method.subSignature)
+            ?.let { typeRegistry.findSubstitutionOrNull(it) ?: it }
 
-        val jimpleBody = overriddenMethod?.jimpleBody() ?: method.jimpleBody()
-        val graphResult = GraphResult(jimpleBody.graph())
-
-        return listOf(graphResult)
+        return if (overriddenMethod == null) {
+            // No overridden method has been found, switch to concrete execution
+            pathLogger.warn("Method ${overriddenClass.name}::${method.subSignature} not found, executing concretely")
+            emptyList()
+        } else {
+            val jimpleBody = overriddenMethod.jimpleBody()
+            val graphResult = GraphResult(jimpleBody.graph())
+            listOf(graphResult)
+        }
     }
 }
 
 /**
- * WrapperInterface that proxies an implementation with methods of [overriddenClass].
+ * Wrapper for a particular [java.util.Collection] or [java.util.Map] or [java.util.stream.Stream].
  */
-abstract class BaseCollectionWrapper(collectionClassName: String) : BaseOverriddenWrapper(collectionClassName) {
+abstract class BaseContainerWrapper(containerClassName: String) : BaseOverriddenWrapper(containerClassName) {
     /**
      * Resolve [wrapper] to [UtAssembleModel] using [resolver].
      */
     override fun value(resolver: Resolver, wrapper: ObjectValue): UtAssembleModel = resolver.run {
-        val classId = chooseClassIdWithConstructor(wrapper.type.sootClass.id)
         val addr = holder.concreteAddr(wrapper.addr)
         val modelName = nextModelName(baseModelName)
 
         val parameterModels = resolveValueModels(wrapper)
 
+        val classId = chooseClassIdWithConstructor(wrapper.type.sootClass.id)
+
         val instantiationChain = mutableListOf<UtStatementModel>()
         val modificationsChain = mutableListOf<UtStatementModel>()
-        return UtAssembleModel(addr, classId, modelName, instantiationChain, modificationsChain)
+
+        UtAssembleModel(addr, classId, modelName, instantiationChain, modificationsChain)
             .apply {
-                instantiationChain += UtExecutableCallModel(null, constructorId(classId), emptyList(), this)
-                modificationsChain += parameterModels.map { UtExecutableCallModel(this, modificationMethodId, it) }
+                instantiationChain += UtExecutableCallModel(
+                    instance = null,
+                    executable = constructorId(classId),
+                    params = emptyList(),
+                    returnValue = this
+                )
+
+                modificationsChain += parameterModels.map {
+                    UtExecutableCallModel(this, modificationMethodId, it)
+                }
             }
     }
 
@@ -140,46 +161,26 @@ abstract class BaseCollectionWrapper(collectionClassName: String) : BaseOverridd
     override fun toString() = "$overriddenClassName()"
 }
 
-/**
- * Auxiliary enum class for specifying an implementation for [ListWrapper], that it will use.
- */
-enum class UtListClass {
-    UT_ARRAY_LIST,
-    UT_LINKED_LIST;
-
-    val className: String
-        get() = when (this) {
-            UT_ARRAY_LIST -> UtArrayList::class.java.canonicalName
-            UT_LINKED_LIST -> UtLinkedList::class.java.canonicalName
-        }
-}
-
-/**
- * BaseCollectionWrapper that uses implementation of [UtArrayList] or [UtLinkedList]
- * depending on specified [utListClass] parameter.
- *
- * At resolving stage ListWrapper is resolved to [UtAssembleModel].
- * This model is instantiated by [java.util.ArrayList] constructor if utListClass is [UtListClass.UT_ARRAY_LIST]
- * or by [java.util.LinkedList] constructor, if utListClass is [UtListClass.UT_LINKED_LIST]
- *
- * Modification chain consists of consequent [java.util.List.add] methods
- * that are arranged to iterating order of list.
- */
-class ListWrapper(private val utListClass: UtListClass) : BaseCollectionWrapper(utListClass.className) {
-    override fun UtBotSymbolicEngine.overrideInvoke(
+abstract class BaseGenericStorageBasedContainerWrapper(containerClassName: String) : BaseContainerWrapper(containerClassName) {
+    override fun Traverser.overrideInvoke(
         wrapper: ObjectValue,
         method: SootMethod,
         parameters: List<SymbolicValue>
     ): List<InvokeResult>? =
-        if (method.signature == UT_GENERIC_STORAGE_SET_EQUAL_GENERIC_TYPE_SIGNATURE) {
-            listOf(
-                MethodResult(
+        when (method.signature) {
+            UT_GENERIC_STORAGE_SET_EQUAL_GENERIC_TYPE_SIGNATURE -> {
+                val equalGenericTypeConstraint = typeRegistry
+                    .eqGenericSingleTypeParameterConstraint(parameters[0].addr, wrapper.addr)
+                    .asHardConstraint()
+
+                val methodResult = MethodResult(
                     SymbolicSuccess(voidValue),
-                    typeRegistry.eqGenericSingleTypeParameterConstraint(parameters[0].addr, wrapper.addr).asHardConstraint()
+                    equalGenericTypeConstraint
                 )
-            )
-        } else {
-            null
+
+                listOf(methodResult)
+            }
+            else -> null
         }
 
     override fun Resolver.resolveValueModels(wrapper: ObjectValue): List<List<UtModel>> {
@@ -188,7 +189,39 @@ class ListWrapper(private val utListClass: UtListClass) : BaseCollectionWrapper(
 
         return arrayModel?.let { constructValues(arrayModel, arrayModel.length) } ?: emptyList()
     }
+}
 
+/**
+ * Auxiliary enum class for specifying an implementation for [ListWrapper], that it will use.
+ */
+enum class UtListClass {
+    UT_ARRAY_LIST,
+    UT_LINKED_LIST,
+    UT_LINKED_LIST_WITH_NULLABLE_CHECK;
+
+    val className: String
+        get() = when (this) {
+            UT_ARRAY_LIST -> UtArrayList::class.java.canonicalName
+            UT_LINKED_LIST -> UtLinkedList::class.java.canonicalName
+            UT_LINKED_LIST_WITH_NULLABLE_CHECK -> UtLinkedListWithNullableCheck::class.java.canonicalName
+        }
+}
+
+/**
+ * BaseCollectionWrapper that uses implementation of [UtArrayList], [UtLinkedList], or [UtLinkedListWithNullableCheck]
+ * depending on specified [utListClass] parameter.
+ *
+ * This class is also used for wrapping [java.util.Queue], because [UtLinkedList] and [UtLinkedListWithNullableCheck]
+ * both implement [java.util.Queue].
+ *
+ * At resolving stage ListWrapper is resolved to [UtAssembleModel].
+ * This model is instantiated by constructor which is taken from the type from the passed [ReferenceValue] in [value]
+ * function.
+ *
+ * Modification chain consists of consequent [java.util.Collection.add] methods
+ * that are arranged to iterating order of list.
+ */
+class ListWrapper(private val utListClass: UtListClass) : BaseGenericStorageBasedContainerWrapper(utListClass.className) {
     /**
      * Chooses proper class for instantiation. Uses [java.util.ArrayList] instead of [java.util.List]
      * or [java.util.AbstractList].
@@ -200,10 +233,10 @@ class ListWrapper(private val utListClass: UtListClass) : BaseCollectionWrapper(
     }
 
     override val modificationMethodId: MethodId = methodId(
-        classId = java.util.List::class.id,
+        classId = java.util.Collection::class.id,
         name = "add",
         returnType = booleanClassId,
-        arguments = arrayOf(java.lang.Object::class.id),
+        arguments = arrayOf(objectClassId),
     )
 
     override val baseModelName = "list"
@@ -221,31 +254,7 @@ class ListWrapper(private val utListClass: UtListClass) : BaseCollectionWrapper(
  * through [java.util.HashSet] in program and generated test depends on the order of
  * entries, then real behavior of generated test can differ from expected and undefined.
  */
-class SetWrapper : BaseCollectionWrapper(UtHashSet::class.qualifiedName!!) {
-    override fun UtBotSymbolicEngine.overrideInvoke(
-        wrapper: ObjectValue,
-        method: SootMethod,
-        parameters: List<SymbolicValue>
-    ): List<InvokeResult>? =
-        if (method.signature == UT_GENERIC_STORAGE_SET_EQUAL_GENERIC_TYPE_SIGNATURE) {
-            listOf(
-                MethodResult(
-                    SymbolicSuccess(voidValue),
-                    typeRegistry.eqGenericSingleTypeParameterConstraint(parameters[0].addr, wrapper.addr)
-                        .asHardConstraint()
-                )
-            )
-        } else {
-            null
-        }
-
-    override fun Resolver.resolveValueModels(wrapper: ObjectValue): List<List<UtModel>> {
-        val elementDataFieldId = FieldId(overriddenClass.type.classId, "elementData")
-        val arrayModel = collectFieldModels(wrapper.addr, overriddenClass.type)[elementDataFieldId] as? UtArrayModel
-
-        return arrayModel?.let { constructValues(arrayModel, arrayModel.length) } ?: emptyList()
-    }
-
+class SetWrapper : BaseGenericStorageBasedContainerWrapper(UtHashSet::class.qualifiedName!!) {
     /**
      * Chooses proper class for instantiation. Uses [java.util.ArrayList] instead of [java.util.List]
      * or [java.util.AbstractList].
@@ -260,7 +269,7 @@ class SetWrapper : BaseCollectionWrapper(UtHashSet::class.qualifiedName!!) {
             classId = java.util.Set::class.id,
             name = "add",
             returnType = booleanClassId,
-            arguments = arrayOf(java.lang.Object::class.id),
+            arguments = arrayOf(objectClassId),
         )
 
     override val baseModelName: String = "set"
@@ -278,32 +287,32 @@ class SetWrapper : BaseCollectionWrapper(UtHashSet::class.qualifiedName!!) {
  * through [java.util.HashMap] in program and generated test depends on the order of
  * entries, then real behavior of generated test can differ from expected and undefined.
  */
-class MapWrapper : BaseCollectionWrapper(UtHashMap::class.qualifiedName!!) {
-    override fun UtBotSymbolicEngine.overrideInvoke(
+class MapWrapper : BaseContainerWrapper(UtHashMap::class.qualifiedName!!) {
+    override fun Traverser.overrideInvoke(
         wrapper: ObjectValue,
         method: SootMethod,
         parameters: List<SymbolicValue>
-    ): List<InvokeResult>? {
-        return when (method.signature) {
+    ): List<InvokeResult>? =
+        when (method.signature) {
             UT_GENERIC_STORAGE_SET_EQUAL_GENERIC_TYPE_SIGNATURE -> listOf(
                 MethodResult(
                     SymbolicSuccess(voidValue),
-                    typeRegistry.eqGenericSingleTypeParameterConstraint(parameters[0].addr, wrapper.addr).asHardConstraint()
+                    typeRegistry.eqGenericSingleTypeParameterConstraint(parameters[0].addr, wrapper.addr)
+                        .asHardConstraint()
                 )
             )
             UT_GENERIC_ASSOCIATIVE_SET_EQUAL_GENERIC_TYPE_SIGNATURE -> listOf(
                 MethodResult(
                     SymbolicSuccess(voidValue),
-                        typeRegistry.eqGenericTypeParametersConstraint(
-                            parameters[0].addr,
-                            wrapper.addr,
-                            parameterSize = 2
-                        ).asHardConstraint()
+                    typeRegistry.eqGenericTypeParametersConstraint(
+                        parameters[0].addr,
+                        wrapper.addr,
+                        parameterSize = 2
+                    ).asHardConstraint()
                 )
             )
             else -> null
         }
-    }
 
     override fun Resolver.resolveValueModels(wrapper: ObjectValue): List<List<UtModel>> {
         val fieldModels = collectFieldModels(wrapper.addr, overriddenClass.type)
@@ -344,7 +353,7 @@ class MapWrapper : BaseCollectionWrapper(UtHashMap::class.qualifiedName!!) {
 /**
  * Constructs collection values using underlying array model. If model is null model, returns list of nulls.
  */
-private fun constructValues(model: UtModel, size: Int): List<List<UtModel>> = when (model) {
+internal fun constructValues(model: UtModel, size: Int): List<List<UtModel>> = when (model) {
     is UtArrayModel -> List(size) { listOf(model.stores[it] ?: model.constModel) }
     is UtNullModel -> {
         val elementClassId = model.classId.elementClassId
@@ -370,7 +379,7 @@ private fun constructKeysAndValues(keysModel: UtModel, valuesModel: UtModel, siz
         keysModel is UtArrayModel && valuesModel is UtArrayModel -> {
             List(size) {
                 keysModel.stores[it].let { model ->
-                    val addr = if (model is UtNullModel) 0 else (model as UtReferenceModel).id
+                    val addr = model.getIdOrThrow()
                     // as we do not support generics for now, valuesModel.classId.elementClassId is unknown,
                     // but it can be known with generics support
                     val defaultValue = UtNullModel(valuesModel.classId.elementClassId ?: objectClassId)
@@ -387,7 +396,7 @@ private fun constructKeysAndValues(keysModel: UtModel, valuesModel: UtModel, siz
 private val UT_GENERIC_STORAGE_CLASS
     get() = Scene.v().getSootClass(UtGenericStorage::class.java.canonicalName)
 
-private val UT_GENERIC_STORAGE_SET_EQUAL_GENERIC_TYPE_SIGNATURE =
+internal val UT_GENERIC_STORAGE_SET_EQUAL_GENERIC_TYPE_SIGNATURE =
     UT_GENERIC_STORAGE_CLASS.getMethodByName(UtGenericStorage<*>::setEqualGenericType.name).signature
 
 private val UT_GENERIC_ASSOCIATIVE_CLASS
@@ -397,9 +406,9 @@ private val UT_GENERIC_ASSOCIATIVE_SET_EQUAL_GENERIC_TYPE_SIGNATURE =
     UT_GENERIC_ASSOCIATIVE_CLASS.getMethodByName(UtGenericAssociative<*, *>::setEqualGenericType.name).signature
 
 val ARRAY_LIST_TYPE: RefType
-    get() = Scene.v().getSootClass(ArrayList::class.java.canonicalName).type
+    get() = Scene.v().getSootClass(java.util.ArrayList::class.java.canonicalName).type
 val LINKED_LIST_TYPE: RefType
-    get() = Scene.v().getSootClass(LinkedList::class.java.canonicalName).type
+    get() = Scene.v().getSootClass(java.util.LinkedList::class.java.canonicalName).type
 
 val LINKED_HASH_SET_TYPE: RefType
     get() = Scene.v().getSootClass(java.util.LinkedHashSet::class.java.canonicalName).type
@@ -411,14 +420,17 @@ val LINKED_HASH_MAP_TYPE: RefType
 val HASH_MAP_TYPE: RefType
     get() = Scene.v().getSootClass(java.util.HashMap::class.java.canonicalName).type
 
-internal fun UtBotSymbolicEngine.getArrayField(
+val STREAM_TYPE: RefType
+    get() = Scene.v().getSootClass(java.util.stream.Stream::class.java.canonicalName).type
+
+internal fun Traverser.getArrayField(
     addr: UtAddrExpression,
     wrapperClass: SootClass,
     field: SootField
 ): ArrayValue =
     createFieldOrMock(wrapperClass.type, addr, field, mockInfoGenerator = null) as ArrayValue
 
-internal fun UtBotSymbolicEngine.getIntFieldValue(wrapper: ObjectValue, field: SootField): UtExpression {
+internal fun Traverser.getIntFieldValue(wrapper: ObjectValue, field: SootField): UtExpression {
     val chunkId = hierarchy.chunkIdForField(field.declaringClass.type, field)
     val descriptor = MemoryChunkDescriptor(chunkId, field.declaringClass.type, IntType.v())
     val array = memory.findArray(descriptor, MemoryState.CURRENT)

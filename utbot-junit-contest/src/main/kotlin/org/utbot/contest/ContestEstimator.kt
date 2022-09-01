@@ -1,22 +1,5 @@
 package org.utbot.contest
 
-import org.utbot.common.FileUtil
-import org.utbot.common.bracket
-import org.utbot.common.info
-import org.utbot.common.pid
-import org.utbot.contest.Paths.classesLists
-import org.utbot.contest.Paths.dependenciesJars
-import org.utbot.contest.Paths.evosuiteGeneratedTestsFile
-import org.utbot.contest.Paths.evosuiteJarPath
-import org.utbot.contest.Paths.evosuiteOutputDir
-import org.utbot.contest.Paths.evosuiteReportFile
-import org.utbot.contest.Paths.jarsDir
-import org.utbot.contest.Paths.moduleTestDir
-import org.utbot.contest.Paths.outputDir
-import org.utbot.framework.plugin.api.util.UtContext
-import org.utbot.framework.plugin.api.util.id
-import org.utbot.framework.plugin.api.util.withUtContext
-import org.utbot.instrumentation.ConcreteExecutor
 import java.io.File
 import java.io.FileInputStream
 import java.net.URLClassLoader
@@ -26,17 +9,39 @@ import java.nio.file.StandardCopyOption
 import java.util.concurrent.CancellationException
 import java.util.concurrent.TimeUnit
 import java.util.zip.ZipInputStream
+import mu.KotlinLogging
+import org.utbot.analytics.EngineAnalyticsContext
+import org.utbot.analytics.Predictors
+import org.utbot.common.FileUtil
+import org.utbot.common.bracket
+import org.utbot.common.info
+import org.utbot.contest.Paths.classesLists
+import org.utbot.contest.Paths.dependenciesJars
+import org.utbot.contest.Paths.evosuiteGeneratedTestsFile
+import org.utbot.contest.Paths.evosuiteJarPath
+import org.utbot.contest.Paths.evosuiteOutputDir
+import org.utbot.contest.Paths.evosuiteReportFile
+import org.utbot.contest.Paths.jarsDir
+import org.utbot.contest.Paths.moduleTestDir
+import org.utbot.contest.Paths.outputDir
+import org.utbot.features.FeatureExtractorFactoryImpl
+import org.utbot.features.FeatureProcessorWithStatesRepetitionFactory
+import org.utbot.framework.PathSelectorType
+import org.utbot.framework.UtSettings
+import org.utbot.framework.plugin.api.util.UtContext
+import org.utbot.framework.plugin.api.util.id
+import org.utbot.framework.plugin.api.util.withUtContext
+import org.utbot.framework.plugin.services.JdkInfoService
+import org.utbot.instrumentation.ConcreteExecutor
+import org.utbot.predictors.StateRewardPredictorFactoryImpl
 import kotlin.concurrent.thread
 import kotlin.math.min
-import kotlin.system.exitProcess
-import mu.KotlinLogging
-import org.utbot.framework.JdkPathService
 
 private val logger = KotlinLogging.logger {}
 
 private val classPathSeparator = System.getProperty("path.separator")
-//To hack it to debug something be like Dima
-// if (System.getProperty("user.name") == "d00555580") my_path else "JAVA_HOME"
+//To hack it to debug something be like Duke
+// if (System.getProperty("user.name") == "duke") my_path else "JAVA_HOME"
 private val javaHome = System.getenv("JAVA_HOME")
 
 private val javacCmd = "$javaHome/bin/javac"
@@ -195,7 +200,7 @@ enum class Tool {
                 logger.info { "Started processing $classFqn" }
                 val process = ProcessBuilder(command).redirectErrorStream(true).start()
 
-                logger.info { "Pid: ${process.pid}" }
+                logger.info { "Pid: ${process.pid()}" }
 
                 process.inputStream.bufferedReader().use { reader ->
                     while (true) {
@@ -293,7 +298,7 @@ fun main(args: Array<String>) {
         tools = listOf(Tool.UtBot)
     }
 
-    JdkPathService.jdkPathProvider = ContestEstimatorJdkPathProvider(javaHome)
+    JdkInfoService.jdkInfoProvider = ContestEstimatorJdkInfoProvider(javaHome)
     runEstimator(estimatorArgs, methodFilter, projectFilter, processedClassesThreshold, tools)
 }
 
@@ -304,7 +309,7 @@ fun runEstimator(
     projectFilter: List<String>?,
     processedClassesThreshold: Int,
     tools: List<Tool>
-) {
+): GlobalStats {
 
     val classesLists = File(args[0])
     val classpathDir = File(args[1])
@@ -321,6 +326,17 @@ fun runEstimator(
 //    Predictors.smtIncremental = UtBotTimePredictorIncremental()
 //    Predictors.testName = StatementUniquenessPredictor()
 
+    EngineAnalyticsContext.featureProcessorFactory = FeatureProcessorWithStatesRepetitionFactory()
+    EngineAnalyticsContext.featureExtractorFactory = FeatureExtractorFactoryImpl()
+    EngineAnalyticsContext.stateRewardPredictorFactory = StateRewardPredictorFactoryImpl()
+    if (UtSettings.pathSelectorType == PathSelectorType.NN_REWARD_GUIDED_SELECTOR) {
+        Predictors.stateRewardPredictor = EngineAnalyticsContext.stateRewardPredictorFactory()
+    }
+    
+    logger.info { "PathSelectorType: ${UtSettings.pathSelectorType}" }
+    if (UtSettings.pathSelectorType == PathSelectorType.NN_REWARD_GUIDED_SELECTOR) {
+        logger.info { "RewardModelPath: ${UtSettings.rewardModelPath}" }
+    }
 
     // fix for CTRL-ALT-SHIFT-C from IDEA, which copies in class#method form
     // fix for path form
@@ -406,8 +422,11 @@ fun runEstimator(
     logger.info { globalStats }
     ConcreteExecutor.defaultPool.close()
 
-    if (globalStats.statsForClasses.isNotEmpty())
-        exitProcess(1)
+//    For what?
+//    if (globalStats.statsForClasses.isNotEmpty())
+//        exitProcess(1)
+
+    return globalStats
 }
 
 private fun moveFolder(sourceFile: File, targetFile: File) {

@@ -4,7 +4,9 @@ import org.utbot.framework.plugin.api.ClassId
 import org.utbot.framework.plugin.api.ConstructorId
 import org.utbot.framework.plugin.api.FieldId
 import org.utbot.framework.plugin.api.id
+import org.utbot.framework.plugin.api.util.isArray
 import org.utbot.framework.plugin.api.util.isRefType
+import org.utbot.framework.plugin.api.util.jClass
 import soot.Scene
 import soot.SootMethod
 import soot.Type
@@ -54,12 +56,12 @@ class ConstructorAnalyzer {
      * Retrieves information about [constructorId] params and modified fields from Soot.
      */
     fun analyze(constructorId: ConstructorId): ConstructorAssembleInfo {
-        setFields.clear()
-        affectedFields.clear()
+        val setFields = mutableSetOf<FieldId>()
+        val affectedFields = mutableSetOf<FieldId>()
 
         val sootConstructor = sootConstructor(constructorId)
             ?: error("Soot representation of $constructorId is not found.")
-        val params = analyze(sootConstructor)
+        val params = analyze(sootConstructor, setFields, affectedFields)
 
         return ConstructorAssembleInfo(constructorId, params, setFields, affectedFields)
     }
@@ -106,24 +108,26 @@ class ConstructorAnalyzer {
         return jimpleLocal.name.first() != '$'
     }
 
-    private val setFields = mutableSetOf<FieldId>()
-    private val affectedFields = mutableSetOf<FieldId>()
     private val visitedConstructors = mutableSetOf<SootMethod>()
 
-    private fun analyze(sootConstructor: SootMethod): Map<Int, FieldId> {
+    private fun analyze(
+        sootConstructor: SootMethod,
+        setFields: MutableSet<FieldId>,
+        affectedFields: MutableSet<FieldId>,
+    ): Map<Int, FieldId> {
         if (sootConstructor in visitedConstructors) {
             return emptyMap()
         }
         visitedConstructors.add(sootConstructor)
 
         val jimpleBody = retrieveJimpleBody(sootConstructor) ?: return emptyMap()
-        analyzeAssignments(jimpleBody)
+        analyzeAssignments(jimpleBody, setFields, affectedFields)
 
         val indexOfLocals = jimpleVariableIndices(jimpleBody)
         val indexedFields = indexToField(sootConstructor).toMutableMap()
 
         for (invocation in invocations(jimpleBody)) {
-            val invokedIndexedFields = analyze(invocation.method)
+            val invokedIndexedFields = analyze(invocation.method, setFields, affectedFields)
 
             for ((index, argument) in invocation.args.withIndex()) {
                 val fieldId = invokedIndexedFields[index] ?: continue
@@ -140,7 +144,11 @@ class ConstructorAnalyzer {
      * Analyze assignments if they are primitive and allow
      * to set a field into required value so on.
      */
-    private fun analyzeAssignments(jimpleBody: JimpleBody) {
+    private fun analyzeAssignments(
+        jimpleBody: JimpleBody,
+        setFields: MutableSet<FieldId>,
+        affectedFields: MutableSet<FieldId>,
+    ) {
         for (assn in assignments(jimpleBody)) {
             val leftPart = assn.leftOp as? JInstanceFieldRef ?: continue
 
@@ -164,7 +172,7 @@ class ConstructorAnalyzer {
         for (assn in assignments) {
             val jimpleLocal = assn.rightOp as? JimpleLocal ?: continue
 
-            val field = (assn.leftOp as JInstanceFieldRef).field
+            val field = (assn.leftOp as? JInstanceFieldRef)?.field ?: continue
             val parameterIndex = jimpleBody.locals.indexOfFirst { it.name == jimpleLocal.name }
             indexedFields[parameterIndex - 1] = FieldId(field.declaringClass.id, field.name)
         }
@@ -242,7 +250,11 @@ class ConstructorAnalyzer {
      */
     private fun getParameterType(type: ClassId): Type? =
         try {
-            if (type.isRefType) scene.getRefType(type.name) else scene.getType(type.name)
+            when {
+                type.isRefType -> scene.getRefType(type.name)
+                type.isArray -> scene.getType(type.jClass.canonicalName)
+                else ->  scene.getType(type.name)
+            }
         } catch (e: Exception) {
             null
         }

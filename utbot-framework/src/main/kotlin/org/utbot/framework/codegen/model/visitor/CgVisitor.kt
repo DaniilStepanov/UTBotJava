@@ -1,5 +1,8 @@
 package org.utbot.framework.codegen.model.visitor
 
+import org.utbot.framework.codegen.model.tree.AbstractCgClass
+import org.utbot.framework.codegen.model.tree.AbstractCgClassBody
+import org.utbot.framework.codegen.model.tree.AbstractCgClassFile
 import org.utbot.framework.codegen.model.tree.CgAbstractFieldAccess
 import org.utbot.framework.codegen.model.tree.CgAbstractMultilineComment
 import org.utbot.framework.codegen.model.tree.CgAllocateArray
@@ -7,6 +10,7 @@ import org.utbot.framework.codegen.model.tree.CgAllocateInitializedArray
 import org.utbot.framework.codegen.model.tree.CgAnonymousFunction
 import org.utbot.framework.codegen.model.tree.CgArrayAnnotationArgument
 import org.utbot.framework.codegen.model.tree.CgArrayElementAccess
+import org.utbot.framework.codegen.model.tree.CgArrayInitializer
 import org.utbot.framework.codegen.model.tree.CgAssignment
 import org.utbot.framework.codegen.model.tree.CgBreakStatement
 import org.utbot.framework.codegen.model.tree.CgComment
@@ -21,6 +25,7 @@ import org.utbot.framework.codegen.model.tree.CgDocClassLinkStmt
 import org.utbot.framework.codegen.model.tree.CgDocCodeStmt
 import org.utbot.framework.codegen.model.tree.CgDocMethodLinkStmt
 import org.utbot.framework.codegen.model.tree.CgDocPreTagStatement
+import org.utbot.framework.codegen.model.tree.CgCustomTagStatement
 import org.utbot.framework.codegen.model.tree.CgDocRegularStmt
 import org.utbot.framework.codegen.model.tree.CgDocumentationComment
 import org.utbot.framework.codegen.model.tree.CgElement
@@ -41,6 +46,7 @@ import org.utbot.framework.codegen.model.tree.CgGreaterThan
 import org.utbot.framework.codegen.model.tree.CgIfStatement
 import org.utbot.framework.codegen.model.tree.CgIncrement
 import org.utbot.framework.codegen.model.tree.CgInnerBlock
+import org.utbot.framework.codegen.model.tree.CgIsInstance
 import org.utbot.framework.codegen.model.tree.CgLessThan
 import org.utbot.framework.codegen.model.tree.CgLiteral
 import org.utbot.framework.codegen.model.tree.CgLogicalAnd
@@ -52,9 +58,12 @@ import org.utbot.framework.codegen.model.tree.CgMultilineComment
 import org.utbot.framework.codegen.model.tree.CgMultipleArgsAnnotation
 import org.utbot.framework.codegen.model.tree.CgNamedAnnotationArgument
 import org.utbot.framework.codegen.model.tree.CgNonStaticRunnable
-import org.utbot.framework.codegen.model.tree.CgNotNullVariable
+import org.utbot.framework.codegen.model.tree.CgNotNullAssertion
 import org.utbot.framework.codegen.model.tree.CgParameterDeclaration
 import org.utbot.framework.codegen.model.tree.CgParameterizedTestDataProviderMethod
+import org.utbot.framework.codegen.model.tree.CgRegularClass
+import org.utbot.framework.codegen.model.tree.CgRegularClassBody
+import org.utbot.framework.codegen.model.tree.CgRegularClassFile
 import org.utbot.framework.codegen.model.tree.CgReturnStatement
 import org.utbot.framework.codegen.model.tree.CgSimpleRegion
 import org.utbot.framework.codegen.model.tree.CgSingleArgAnnotation
@@ -84,10 +93,16 @@ import org.utbot.framework.codegen.model.tree.CgWhileLoop
 interface CgVisitor<R> {
     fun visit(element: CgElement): R
 
+    fun visit(element: AbstractCgClassFile<*>): R
+    fun visit(element: CgRegularClassFile): R
     fun visit(element: CgTestClassFile): R
 
+    fun visit(element: AbstractCgClass<*>): R
+    fun visit(element: CgRegularClass): R
     fun visit(element: CgTestClass): R
 
+    fun visit(element: AbstractCgClassBody): R
+    fun visit(element: CgRegularClassBody): R
     fun visit(element: CgTestClassBody): R
 
     fun visit(element: CgStaticsRegion): R
@@ -120,6 +135,7 @@ interface CgVisitor<R> {
 
     // Comment statements
     fun visit(element: CgDocPreTagStatement): R
+    fun visit(element: CgCustomTagStatement): R
     fun visit(element: CgDocCodeStmt): R
     fun visit(element: CgDocRegularStmt): R
     fun visit(element: CgDocClassLinkStmt): R
@@ -179,12 +195,18 @@ interface CgVisitor<R> {
     // Type cast
     fun visit(element: CgTypeCast): R
 
+    // isInstance check
+    fun visit(element: CgIsInstance): R
+
     // This instance
     fun visit(element: CgThisInstance): R
 
     // Variables
     fun visit(element: CgVariable): R
-    fun visit(element: CgNotNullVariable): R
+
+    // Not-null assertion
+
+    fun visit(element: CgNotNullAssertion): R
 
     // Method parameters
     fun visit(element: CgParameterDeclaration): R
@@ -200,6 +222,7 @@ interface CgVisitor<R> {
     // Array allocation
     fun visit(element: CgAllocateArray): R
     fun visit(element: CgAllocateInitializedArray): R
+    fun visit(element: CgArrayInitializer): R
 
     // Spread operator
     fun visit(element: CgSpread): R

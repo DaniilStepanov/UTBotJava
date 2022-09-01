@@ -6,7 +6,11 @@ import org.utbot.common.workaround
 import org.utbot.framework.codegen.Import
 import org.utbot.framework.codegen.RegularImport
 import org.utbot.framework.codegen.StaticImport
+import org.utbot.framework.codegen.model.UtilClassKind
 import org.utbot.framework.codegen.model.constructor.context.CgContext
+import org.utbot.framework.codegen.model.tree.AbstractCgClass
+import org.utbot.framework.codegen.model.tree.AbstractCgClassBody
+import org.utbot.framework.codegen.model.tree.AbstractCgClassFile
 import org.utbot.framework.codegen.model.tree.CgAbstractFieldAccess
 import org.utbot.framework.codegen.model.tree.CgAbstractMultilineComment
 import org.utbot.framework.codegen.model.tree.CgArrayElementAccess
@@ -16,6 +20,7 @@ import org.utbot.framework.codegen.model.tree.CgComment
 import org.utbot.framework.codegen.model.tree.CgCommentedAnnotation
 import org.utbot.framework.codegen.model.tree.CgComparison
 import org.utbot.framework.codegen.model.tree.CgContinueStatement
+import org.utbot.framework.codegen.model.tree.CgCustomTagStatement
 import org.utbot.framework.codegen.model.tree.CgDeclaration
 import org.utbot.framework.codegen.model.tree.CgDecrement
 import org.utbot.framework.codegen.model.tree.CgDoWhileLoop
@@ -39,6 +44,7 @@ import org.utbot.framework.codegen.model.tree.CgGreaterThan
 import org.utbot.framework.codegen.model.tree.CgIfStatement
 import org.utbot.framework.codegen.model.tree.CgIncrement
 import org.utbot.framework.codegen.model.tree.CgInnerBlock
+import org.utbot.framework.codegen.model.tree.CgIsInstance
 import org.utbot.framework.codegen.model.tree.CgLessThan
 import org.utbot.framework.codegen.model.tree.CgLiteral
 import org.utbot.framework.codegen.model.tree.CgLogicalAnd
@@ -50,10 +56,12 @@ import org.utbot.framework.codegen.model.tree.CgMultilineComment
 import org.utbot.framework.codegen.model.tree.CgMultipleArgsAnnotation
 import org.utbot.framework.codegen.model.tree.CgNamedAnnotationArgument
 import org.utbot.framework.codegen.model.tree.CgNonStaticRunnable
-import org.utbot.framework.codegen.model.tree.CgNotNullVariable
 import org.utbot.framework.codegen.model.tree.CgParameterDeclaration
 import org.utbot.framework.codegen.model.tree.CgParameterizedTestDataProviderMethod
 import org.utbot.framework.codegen.model.tree.CgRegion
+import org.utbot.framework.codegen.model.tree.CgRegularClass
+import org.utbot.framework.codegen.model.tree.CgRegularClassBody
+import org.utbot.framework.codegen.model.tree.CgRegularClassFile
 import org.utbot.framework.codegen.model.tree.CgReturnStatement
 import org.utbot.framework.codegen.model.tree.CgSimpleRegion
 import org.utbot.framework.codegen.model.tree.CgSingleArgAnnotation
@@ -65,7 +73,6 @@ import org.utbot.framework.codegen.model.tree.CgStaticFieldAccess
 import org.utbot.framework.codegen.model.tree.CgStaticRunnable
 import org.utbot.framework.codegen.model.tree.CgStaticsRegion
 import org.utbot.framework.codegen.model.tree.CgTestClass
-import org.utbot.framework.codegen.model.tree.CgTestClassBody
 import org.utbot.framework.codegen.model.tree.CgTestClassFile
 import org.utbot.framework.codegen.model.tree.CgTestMethod
 import org.utbot.framework.codegen.model.tree.CgTestMethodCluster
@@ -78,25 +85,25 @@ import org.utbot.framework.codegen.model.tree.CgVariable
 import org.utbot.framework.codegen.model.tree.CgWhileLoop
 import org.utbot.framework.codegen.model.util.CgPrinter
 import org.utbot.framework.codegen.model.util.CgPrinterImpl
-import org.utbot.framework.codegen.model.util.resolve
 import org.utbot.framework.plugin.api.ClassId
 import org.utbot.framework.plugin.api.CodegenLanguage
 import org.utbot.framework.plugin.api.MethodId
 import org.utbot.framework.plugin.api.TypeParameters
-import org.utbot.framework.plugin.api.UtArrayModel
-import org.utbot.framework.plugin.api.UtModel
-import org.utbot.framework.plugin.api.UtNullModel
-import org.utbot.framework.plugin.api.UtPrimitiveModel
 import org.utbot.framework.plugin.api.util.booleanClassId
 import org.utbot.framework.plugin.api.util.byteClassId
 import org.utbot.framework.plugin.api.util.charClassId
 import org.utbot.framework.plugin.api.util.doubleClassId
 import org.utbot.framework.plugin.api.util.floatClassId
 import org.utbot.framework.plugin.api.util.intClassId
+import org.utbot.framework.plugin.api.util.isArray
+import org.utbot.framework.plugin.api.util.isRefType
 import org.utbot.framework.plugin.api.util.longClassId
 import org.utbot.framework.plugin.api.util.shortClassId
 
-internal abstract class CgAbstractRenderer(val context: CgContext, val printer: CgPrinter = CgPrinterImpl()) : CgVisitor<Unit>,
+internal abstract class CgAbstractRenderer(
+    val context: CgRendererContext,
+    val printer: CgPrinter = CgPrinterImpl()
+) : CgVisitor<Unit>,
     CgPrinter by printer {
 
     protected abstract val statementEnding: String
@@ -111,19 +118,20 @@ internal abstract class CgAbstractRenderer(val context: CgContext, val printer: 
 
     protected abstract val langPackage: String
 
-    //We may render array elements in initializer in one line or in separate lines:
-    //items count in one line depends on the value type.
-    protected fun arrayElementsInLine(constModel: UtModel): Int {
-        if (constModel is UtNullModel) return 10
-        return when (constModel.classId) {
+    // We may render array elements in initializer in one line or in separate lines:
+    // items count in one line depends on the element type.
+    protected fun arrayElementsInLine(elementType: ClassId): Int {
+        if (elementType.isRefType) return 10
+        if (elementType.isArray) return 1
+        return when (elementType) {
             intClassId, byteClassId, longClassId, charClassId -> 8
             booleanClassId, shortClassId, doubleClassId, floatClassId -> 6
-            else -> error("Non primitive value of type ${constModel.classId} is unexpected in array initializer")
+            else -> error("Non primitive value of type $elementType is unexpected in array initializer")
         }
     }
 
     private val MethodId.accessibleByName: Boolean
-        get() = (context.shouldOptimizeImports && this in context.importedStaticMethods) || classId == context.currentTestClass
+        get() = (context.shouldOptimizeImports && this in context.importedStaticMethods) || classId == context.generatedClass
 
     override fun visit(element: CgElement) {
         val error =
@@ -131,18 +139,40 @@ internal abstract class CgAbstractRenderer(val context: CgContext, val printer: 
         throw IllegalArgumentException(error)
     }
 
-    override fun visit(element: CgTestClassFile) {
-        renderClassPackage(element.testClass)
+    override fun visit(element: AbstractCgClassFile<*>) {
+        renderClassPackage(element.declaredClass)
         renderClassFileImports(element)
-        element.testClass.accept(this)
+        element.declaredClass.accept(this)
     }
 
-    override fun visit(element: CgTestClassBody) {
-        // render regions for test methods and utils
-        for ((i, region) in (element.regions + element.utilsRegion).withIndex()) {
-            if (i != 0) println()
+    override fun visit(element: CgRegularClassFile) {
+        visit(element as AbstractCgClassFile<*>)
+    }
 
-            region.accept(this)
+    override fun visit(element: CgTestClassFile) {
+        visit(element as AbstractCgClassFile<*>)
+    }
+
+    override fun visit(element: CgRegularClass) {
+        visit(element as AbstractCgClass<*>)
+    }
+
+    override fun visit(element: CgTestClass) {
+        visit(element as AbstractCgClass<*>)
+    }
+
+    override fun visit(element: AbstractCgClassBody) {
+        visit(element as CgElement)
+    }
+
+    override fun visit(element: CgRegularClassBody) {
+        val content = element.content
+        for ((index, item) in content.withIndex()) {
+            item.accept(this)
+            println()
+            if (index < content.lastIndex) {
+                println()
+            }
         }
     }
 
@@ -198,10 +228,9 @@ internal abstract class CgAbstractRenderer(val context: CgContext, val printer: 
     }
 
     override fun visit(element: CgUtilMethod) {
-        context.currentTestClass
-                .utilMethodById(element.id, context)
-                .split("\n")
-                .forEach { line -> println(line) }
+        val utilMethodText = element.getText(context)
+        utilMethodText.split("\n")
+            .forEach { line -> println(line) }
     }
 
     // Methods
@@ -311,11 +340,19 @@ internal abstract class CgAbstractRenderer(val context: CgContext, val printer: 
     }
     override fun visit(element: CgDocPreTagStatement) {
         if (element.content.all { it.isEmpty() }) return
-
         println("<pre>")
         for (stmt in element.content) stmt.accept(this)
         println("</pre>")
     }
+
+    override fun visit(element: CgCustomTagStatement) {
+        if (element.statements.all { it.isEmpty() }) return
+
+        for (stmt in element.statements) {
+            stmt.accept(this)
+        }
+    }
+
     override fun visit(element: CgDocCodeStmt) {
         if (element.isEmpty()) return
 
@@ -423,6 +460,15 @@ internal abstract class CgAbstractRenderer(val context: CgContext, val printer: 
 
     override fun visit(element: CgDecrement) {
         print("${element.variable.name}--")
+    }
+
+    // isInstance check
+
+    override fun visit(element: CgIsInstance) {
+        element.classExpression.accept(this)
+        print(".isInstance(")
+        element.value.accept(this)
+        print(")")
     }
 
     // Try-catch
@@ -539,8 +585,6 @@ internal abstract class CgAbstractRenderer(val context: CgContext, val printer: 
     override fun visit(element: CgVariable) {
         print(element.name.escapeNamePossibleKeyword())
     }
-
-    abstract override fun visit(element: CgNotNullVariable)
 
     // Method parameters
 
@@ -713,17 +757,6 @@ internal abstract class CgAbstractRenderer(val context: CgContext, val printer: 
 
     protected abstract fun renderExceptionCatchVariable(exception: CgVariable)
 
-    protected fun UtArrayModel.getElementExpr(index: Int): CgExpression {
-        val itemModel = stores.getOrDefault(index, constModel)
-        val cgValue: CgExpression = when (itemModel) {
-            is UtPrimitiveModel -> itemModel.value.resolve()
-            is UtNullModel -> null.resolve()
-            else -> error("Non primitive or null model $itemModel is unexpected in array initializer")
-        }
-
-        return cgValue
-    }
-
     protected fun getEscapedImportRendering(import: Import): String =
         import.qualifiedName
             .split(".")
@@ -755,10 +788,11 @@ internal abstract class CgAbstractRenderer(val context: CgContext, val printer: 
         }
     }
 
-    protected fun UtArrayModel.renderElements(length: Int, elementsInLine: Int) {
+    protected fun List<CgExpression>.renderElements(elementsInLine: Int) {
+        val length = this.size
         if (length <= elementsInLine) { // one-line array
             for (i in 0 until length) {
-                val expr = this.getElementExpr(i)
+                val expr = this[i]
                 expr.accept(this@CgAbstractRenderer)
                 if (i != length - 1) {
                     print(", ")
@@ -768,7 +802,7 @@ internal abstract class CgAbstractRenderer(val context: CgContext, val printer: 
             println() // line break after `int[] x = {`
             withIndent {
                 for (i in 0 until length) {
-                    val expr = this.getElementExpr(i)
+                    val expr = this[i]
                     expr.accept(this@CgAbstractRenderer)
 
                     if (i == length - 1) {
@@ -793,7 +827,7 @@ internal abstract class CgAbstractRenderer(val context: CgContext, val printer: 
     }
 
     protected open fun isAccessibleBySimpleNameImpl(classId: ClassId): Boolean =
-        classId in context.importedClasses || classId.packageName == context.testClassPackageName
+        classId in context.importedClasses || classId.packageName == context.classPackageName
 
     protected abstract fun escapeNamePossibleKeywordImpl(s: String): String
 
@@ -806,14 +840,14 @@ internal abstract class CgAbstractRenderer(val context: CgContext, val printer: 
         return if (this.isAccessibleBySimpleName()) simpleNameWithEnclosings else canonicalName
     }
 
-    private fun renderClassPackage(element: CgTestClass) {
+    private fun renderClassPackage(element: AbstractCgClass<*>) {
         if (element.packageName.isNotEmpty()) {
             println("package ${element.packageName}${statementEnding}")
             println()
         }
     }
 
-    private fun renderClassFileImports(element: CgTestClassFile) {
+    private fun renderClassFileImports(element: AbstractCgClassFile<*>) {
         val regularImports = element.imports.filterIsInstance<RegularImport>()
         val staticImports = element.imports.filterIsInstance<StaticImport>()
 
@@ -831,6 +865,10 @@ internal abstract class CgAbstractRenderer(val context: CgContext, val printer: 
             println()
         }
     }
+
+    protected abstract fun renderClassVisibility(classId: ClassId)
+
+    protected abstract fun renderClassModality(aClass: AbstractCgClass<*>)
 
     private fun renderMethodDocumentation(element: CgMethod) {
         element.documentation.accept(this)
@@ -888,11 +926,26 @@ internal abstract class CgAbstractRenderer(val context: CgContext, val printer: 
         fun makeRenderer(
             context: CgContext,
             printer: CgPrinter = CgPrinterImpl()
-        ): CgAbstractRenderer =
-            when (context.codegenLanguage) {
+        ): CgAbstractRenderer {
+            val rendererContext = CgRendererContext.fromCgContext(context)
+            return makeRenderer(rendererContext, printer)
+        }
+
+        fun makeRenderer(
+            utilClassKind: UtilClassKind,
+            codegenLanguage: CodegenLanguage,
+            printer: CgPrinter = CgPrinterImpl()
+        ): CgAbstractRenderer {
+            val rendererContext = CgRendererContext.fromUtilClassKind(utilClassKind, codegenLanguage)
+            return makeRenderer(rendererContext, printer)
+        }
+
+        private fun makeRenderer(context: CgRendererContext, printer: CgPrinter): CgAbstractRenderer {
+            return when (context.codegenLanguage) {
                 CodegenLanguage.JAVA -> CgJavaRenderer(context, printer)
                 CodegenLanguage.KOTLIN -> CgKotlinRenderer(context, printer)
             }
+        }
 
         /**
          * @see [LONG_CODE_FRAGMENTS]

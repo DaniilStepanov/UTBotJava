@@ -21,6 +21,26 @@ class FuzzedMethodDescription(
 ) {
 
     /**
+     * Name that can be used to generate test names
+     */
+    var compilableName: String? = null
+
+    /**
+     * Class Name
+     */
+    var className: String? = null
+
+    /**
+     * Package Name
+     */
+    var packageName: String? = null
+
+    /**
+     * Returns parameter name by its index in the signature
+     */
+    var parameterNameMap: (Int) -> String? = { null }
+
+    /**
      * Map class id to indices of this class in parameters list.
      */
     val parametersMap: Map<ClassId, List<Int>> by lazy {
@@ -37,26 +57,4 @@ class FuzzedMethodDescription(
         executableId.parameters,
         concreteValues
     )
-}
-
-/**
- * Object to pass concrete values to fuzzer
- */
-data class FuzzedConcreteValue(
-    val classId: ClassId,
-    val value: Any,
-    val relativeOp: FuzzedOp = FuzzedOp.NONE,
-)
-enum class FuzzedOp {
-    NONE,
-    EQ,
-    NE,
-    GT,
-    GE,
-    LT,
-    LE,
-    CH, // changed or called
-    ;
-
-    fun isComparisonOp() = this == EQ || this == NE || this == GT || this == GE || this == LT || this == LE
 }

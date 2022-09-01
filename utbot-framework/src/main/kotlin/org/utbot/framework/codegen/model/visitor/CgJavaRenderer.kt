@@ -3,11 +3,12 @@ package org.utbot.framework.codegen.model.visitor
 import org.apache.commons.text.StringEscapeUtils
 import org.utbot.framework.codegen.RegularImport
 import org.utbot.framework.codegen.StaticImport
-import org.utbot.framework.codegen.model.constructor.context.CgContext
+import org.utbot.framework.codegen.model.tree.AbstractCgClass
 import org.utbot.framework.codegen.model.tree.CgAllocateArray
 import org.utbot.framework.codegen.model.tree.CgAllocateInitializedArray
 import org.utbot.framework.codegen.model.tree.CgAnonymousFunction
 import org.utbot.framework.codegen.model.tree.CgArrayAnnotationArgument
+import org.utbot.framework.codegen.model.tree.CgArrayInitializer
 import org.utbot.framework.codegen.model.tree.CgBreakStatement
 import org.utbot.framework.codegen.model.tree.CgConstructorCall
 import org.utbot.framework.codegen.model.tree.CgDeclaration
@@ -22,15 +23,17 @@ import org.utbot.framework.codegen.model.tree.CgGetKotlinClass
 import org.utbot.framework.codegen.model.tree.CgGetLength
 import org.utbot.framework.codegen.model.tree.CgInnerBlock
 import org.utbot.framework.codegen.model.tree.CgMethod
-import org.utbot.framework.codegen.model.tree.CgNotNullVariable
+import org.utbot.framework.codegen.model.tree.CgNotNullAssertion
 import org.utbot.framework.codegen.model.tree.CgParameterDeclaration
 import org.utbot.framework.codegen.model.tree.CgParameterizedTestDataProviderMethod
+import org.utbot.framework.codegen.model.tree.CgRegularClass
 import org.utbot.framework.codegen.model.tree.CgReturnStatement
 import org.utbot.framework.codegen.model.tree.CgStatement
 import org.utbot.framework.codegen.model.tree.CgStatementExecutableCall
 import org.utbot.framework.codegen.model.tree.CgSwitchCase
 import org.utbot.framework.codegen.model.tree.CgSwitchCaseLabel
 import org.utbot.framework.codegen.model.tree.CgTestClass
+import org.utbot.framework.codegen.model.tree.CgTestClassBody
 import org.utbot.framework.codegen.model.tree.CgTestMethod
 import org.utbot.framework.codegen.model.tree.CgTypeCast
 import org.utbot.framework.codegen.model.tree.CgVariable
@@ -42,7 +45,7 @@ import org.utbot.framework.plugin.api.CodegenLanguage
 import org.utbot.framework.plugin.api.TypeParameters
 import org.utbot.framework.plugin.api.util.wrapperByPrimitive
 
-internal class CgJavaRenderer(context: CgContext, printer: CgPrinter = CgPrinterImpl()) :
+internal class CgJavaRenderer(context: CgRendererContext, printer: CgPrinter = CgPrinterImpl()) :
     CgAbstractRenderer(context, printer) {
 
     override val statementEnding: String = ";"
@@ -57,14 +60,22 @@ internal class CgJavaRenderer(context: CgContext, printer: CgPrinter = CgPrinter
 
     override val langPackage: String = "java.lang"
 
-    override fun visit(element: CgTestClass) {
+    override fun visit(element: AbstractCgClass<*>) {
         for (annotation in element.annotations) {
             annotation.accept(this)
         }
-        print("public class ")
+
+        renderClassVisibility(element.id)
+        renderClassModality(element)
+        if (element.isStatic) {
+            print("static ")
+        }
+        print("class ")
         print(element.simpleName)
-        if (element.superclass != null) {
-            print(" extends ${element.superclass.asString()}")
+
+        val superclass = element.superclass
+        if (superclass != null) {
+            print(" extends ${superclass.asString()}")
         }
         if (element.interfaces.isNotEmpty()) {
             print(" implements ")
@@ -73,6 +84,16 @@ internal class CgJavaRenderer(context: CgContext, printer: CgPrinter = CgPrinter
         println(" {")
         withIndent { element.body.accept(this) }
         println("}")
+    }
+
+    override fun visit(element: CgTestClassBody) {
+        // render regions for test methods and utils
+        val allRegions = element.testMethodRegions + element.nestedClassRegions + element.staticDeclarationRegions
+        for ((i, region) in allRegions.withIndex()) {
+            if (i != 0) println()
+
+            region.accept(this)
+        }
     }
 
     override fun visit(element: CgArrayAnnotationArgument) {
@@ -105,26 +126,31 @@ internal class CgJavaRenderer(context: CgContext, printer: CgPrinter = CgPrinter
     }
 
     override fun visit(element: CgTypeCast) {
-        // TODO: check cases when element.expression is CgLiteral of primitive wrapper type and element.targetType is primitive
-        // TODO: example: (double) 1.0, (float) 1.0f, etc.
+        val expr = element.expression
+        val wrappedTargetType = wrapperByPrimitive.getOrDefault(element.targetType, element.targetType)
+        val exprTypeIsSimilar = expr.type == element.targetType || expr.type == wrappedTargetType
+
         // cast for null is mandatory in case of ambiguity - for example, readObject(Object) and readObject(Map)
-        if (element.expression.type == element.targetType && element.expression != nullLiteral()) {
+        if (exprTypeIsSimilar && expr != nullLiteral()) {
             element.expression.accept(this)
             return
         }
 
-        val elementTargetType = element.targetType
-        val targetType = wrapperByPrimitive.getOrDefault(elementTargetType, elementTargetType)
-
         print("(")
         print("(")
-        print(targetType.asString())
+        print(wrappedTargetType.asString())
         print(") ")
         element.expression.accept(this)
         print(")")
     }
 
     override fun visit(element: CgErrorWrapper) {
+        element.expression.accept(this)
+    }
+
+    // Not-null assertion
+
+    override fun visit(element: CgNotNullAssertion) {
         element.expression.accept(this)
     }
 
@@ -151,10 +177,6 @@ internal class CgJavaRenderer(context: CgContext, printer: CgPrinter = CgPrinter
         error("KClass attempted to be used in the Java test class")
     }
 
-    override fun visit(element: CgNotNullVariable) {
-        print(element.name.escapeNamePossibleKeyword())
-    }
-
     override fun visit(element: CgAllocateArray) {
         // TODO: Arsen strongly required to rewrite later
         val typeName = element.type.canonicalName.substringBefore("[")
@@ -163,11 +185,21 @@ internal class CgJavaRenderer(context: CgContext, printer: CgPrinter = CgPrinter
     }
 
     override fun visit(element: CgAllocateInitializedArray) {
-        val arrayModel = element.model
-        val elementsInLine = arrayElementsInLine(arrayModel.constModel)
+        // TODO: same as in visit(CgAllocateArray): we should rewrite the typeName and otherDimensions variables declaration
+        // to avoid using substringBefore() and substringAfter() directly
+        val typeName = element.type.canonicalName.substringBefore("[")
+        val otherDimensions = element.type.canonicalName.substringAfter("]")
+        // we can't specify the size of the first dimension when using initializer,
+        // as opposed to CgAllocateArray where there is no initializer
+        print("new $typeName[]$otherDimensions")
+        element.initializer.accept(this)
+    }
+
+    override fun visit(element: CgArrayInitializer) {
+        val elementsInLine = arrayElementsInLine(element.elementType)
 
         print("{")
-        arrayModel.renderElements(element.size, elementsInLine)
+        element.values.renderElements(elementsInLine)
         print("}")
     }
 
@@ -214,7 +246,8 @@ internal class CgJavaRenderer(context: CgContext, printer: CgPrinter = CgPrinter
         //we do not have a good string representation for two-dimensional array, so this strange if-else is required
         val returnType =
             if (element.returnType.simpleName == "Object[][]") "java.lang.Object[][]" else "${element.returnType}"
-        print("public static $returnType ${element.name}() throws Exception")
+        print("public static $returnType ${element.name}()")
+        renderExceptions(element)
     }
 
     override fun visit(element: CgInnerBlock) {
@@ -317,6 +350,21 @@ internal class CgJavaRenderer(context: CgContext, printer: CgPrinter = CgPrinter
         super.isAccessibleBySimpleNameImpl(classId) || classId.packageName == "java.lang"
 
     override fun escapeNamePossibleKeywordImpl(s: String): String = s
+
+    override fun renderClassVisibility(classId: ClassId) {
+        when {
+            classId.isPublic -> print("public ")
+            classId.isProtected -> print("protected ")
+            classId.isPrivate -> print("private ")
+        }
+    }
+
+    override fun renderClassModality(aClass: AbstractCgClass<*>) {
+        when (aClass) {
+            is CgTestClass -> Unit
+            is CgRegularClass -> if (aClass.id.isFinal) print("final ")
+        }
+    }
 
     private fun renderExceptions(method: CgMethod) {
         method.exceptions.takeIf { it.isNotEmpty() }?.let { exceptions ->

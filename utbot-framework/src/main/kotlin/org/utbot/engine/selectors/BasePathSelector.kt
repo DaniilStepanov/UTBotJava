@@ -1,10 +1,11 @@
 package org.utbot.engine.selectors
 
 import org.utbot.engine.ExecutionState
+import org.utbot.engine.isPreconditionCheckMethod
 import org.utbot.engine.pathLogger
-import org.utbot.engine.pc.UtSolverStatusUNSAT
 import org.utbot.engine.pc.UtSolver
 import org.utbot.engine.pc.UtSolverStatusKind.SAT
+import org.utbot.engine.pc.UtSolverStatusUNSAT
 import org.utbot.engine.selectors.strategies.ChoosingStrategy
 import org.utbot.engine.selectors.strategies.StoppingStrategy
 import org.utbot.framework.UtSettings
@@ -59,7 +60,8 @@ abstract class BasePathSelector(
     /**
      * @return true if [utSolver] constraints are satisfiable
      */
-    private fun checkUnsat(utSolver: UtSolver): Boolean = utSolver.assertions.isNotEmpty() && utSolver.check(respectSoft = false).statusKind != SAT
+    private fun checkUnsat(utSolver: UtSolver): Boolean =
+        utSolver.assertions.isNotEmpty() && utSolver.check(respectSoft = false).statusKind != SAT
 
     /**
      * check fast unsat on forks
@@ -82,6 +84,19 @@ abstract class BasePathSelector(
                 state.close()
                 continue
             }
+
+            // If we have failed assumes, we try to execute the state concretely
+            if (state.solver.failedAssumptions.isNotEmpty()) {
+                // But we do not want to execute concretely states because of
+                // controversies during `preconditionCheck` analysis
+                if (state.lastMethod?.isPreconditionCheckMethod == true) {
+                    state.close()
+                } else {
+                    statesForConcreteExecution += state
+                }
+                continue
+            }
+
             return state
         }
         return null

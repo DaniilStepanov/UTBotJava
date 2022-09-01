@@ -26,12 +26,14 @@ import org.utbot.framework.fields.FieldPath
 import org.utbot.framework.fields.ModifiedFields
 import org.utbot.framework.fields.StateModificationInfo
 import org.utbot.framework.plugin.api.ClassId
+import org.utbot.framework.plugin.api.UtSymbolicExecution
 import org.utbot.framework.plugin.api.util.hasField
 import org.utbot.framework.plugin.api.util.id
 import org.utbot.framework.plugin.api.util.isArray
 import org.utbot.framework.plugin.api.util.isRefType
 import org.utbot.framework.plugin.api.util.objectClassId
 import org.utbot.framework.util.hasThisInstance
+import org.utbot.fuzzer.UtFuzzedExecution
 import java.lang.reflect.Array
 
 internal interface CgFieldStateManager {
@@ -67,13 +69,23 @@ internal class CgFieldStateManagerImpl(val context: CgContext)
     }
 
     private fun rememberThisInstanceState(info: StateModificationInfo, state: FieldState) {
-        if (!currentExecution!!.hasThisInstance()) {
-            return
+        when (currentExecution) {
+            is UtSymbolicExecution -> {
+                if (!(currentExecution!! as UtSymbolicExecution).hasThisInstance()) {
+                    return
+                }
+                val thisInstance = context.thisInstance!!
+                val modifiedFields = info.thisInstance
+                // by now this instance variable must have already been created
+                saveFieldsState(thisInstance, modifiedFields, statesCache.thisInstance, state)
+            }
+            is UtFuzzedExecution -> {
+                return
+            }
+            else -> {
+                return
+            }
         }
-        val thisInstance = context.thisInstance!!
-        val modifiedFields = info.thisInstance
-        // by now this instance variable must have already been created
-        saveFieldsState(thisInstance, modifiedFields, statesCache.thisInstance, state)
     }
 
     private fun rememberArgumentsState(info: StateModificationInfo, state: FieldState) {
@@ -177,7 +189,7 @@ internal class CgFieldStateManagerImpl(val context: CgContext)
                     }
 
                     // if previous field has type that does not have current field, this field is inaccessible
-                    if (index > 0 && !path[index - 1].type.hasField(fieldPathElement.field.name)) {
+                    if (index > 0 && !path[index - 1].type.hasField(fieldPathElement.field)) {
                         lastAccessibleIndex = index - 1
                         break
                     }
@@ -219,7 +231,7 @@ internal class CgFieldStateManagerImpl(val context: CgContext)
             val expression = when (val newElement = path[index++]) {
                 is FieldAccess -> {
                     val field = newElement.field
-                    testClassThisInstance[getFieldValue](prev, stringLiteral(field.name))
+                    utilsClassId[getFieldValue](prev, stringLiteral(field.name))
                 }
                 is ArrayElementAccess -> {
                     Array::class.id[getArrayElement](prev, newElement.index)
@@ -244,7 +256,7 @@ internal class CgFieldStateManagerImpl(val context: CgContext)
             } else {
                 newVar(classCgClassId) { Class::class.id[forName](owner.name) }
             }
-            newVar(objectClassId) { testClassThisInstance[getStaticFieldValue](ownerClass, stringLiteral(firstField.name)) }
+            newVar(objectClassId) { utilsClassId[getStaticFieldValue](ownerClass, stringLiteral(firstField.name)) }
         }
         val path = fieldPath.elements
         val remainingPath = fieldPath.copy(elements = path.drop(1))

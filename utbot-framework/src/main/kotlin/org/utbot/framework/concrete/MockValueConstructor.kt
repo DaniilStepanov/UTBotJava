@@ -1,20 +1,50 @@
 package org.utbot.framework.concrete
 
-import mu.KotlinLogging
-import org.mockito.Mockito
-import org.mockito.stubbing.Answer
-import org.objectweb.asm.Type
-import org.utbot.common.findField
-import org.utbot.common.findFieldOrNull
 import org.utbot.common.invokeCatching
-import org.utbot.framework.plugin.api.*
-import org.utbot.framework.plugin.api.util.*
+import org.utbot.framework.plugin.api.ClassId
+import org.utbot.framework.plugin.api.ConstructorId
+import org.utbot.framework.plugin.api.ExecutableId
+import org.utbot.framework.plugin.api.FieldId
+import org.utbot.framework.plugin.api.FieldMockTarget
+import org.utbot.framework.plugin.api.MethodId
+import org.utbot.framework.plugin.api.MockId
+import org.utbot.framework.plugin.api.MockInfo
+import org.utbot.framework.plugin.api.MockTarget
+import org.utbot.framework.plugin.api.ObjectMockTarget
+import org.utbot.framework.plugin.api.ParameterMockTarget
+import org.utbot.framework.plugin.api.UtArrayModel
+import org.utbot.framework.plugin.api.UtAssembleModel
+import org.utbot.framework.plugin.api.UtClassRefModel
+import org.utbot.framework.plugin.api.UtCompositeModel
+import org.utbot.framework.plugin.api.UtConcreteValue
+import org.utbot.framework.plugin.api.UtDirectSetFieldModel
+import org.utbot.framework.plugin.api.UtEnumConstantModel
+import org.utbot.framework.plugin.api.UtExecutableCallModel
+import org.utbot.framework.plugin.api.UtMockValue
+import org.utbot.framework.plugin.api.UtModel
+import org.utbot.framework.plugin.api.UtNewInstanceInstrumentation
+import org.utbot.framework.plugin.api.UtNullModel
+import org.utbot.framework.plugin.api.UtPrimitiveModel
+import org.utbot.framework.plugin.api.UtReferenceModel
+import org.utbot.framework.plugin.api.UtStaticMethodInstrumentation
+import org.utbot.framework.plugin.api.UtVoidModel
+import org.utbot.framework.plugin.api.isMockModel
+import org.utbot.framework.plugin.api.util.constructor
+import org.utbot.framework.plugin.api.util.executableId
+import org.utbot.framework.plugin.api.util.jField
+import org.utbot.framework.plugin.api.util.jClass
+import org.utbot.framework.plugin.api.util.method
+import org.utbot.framework.plugin.api.util.utContext
 import org.utbot.framework.util.anyInstance
 import java.io.Closeable
 import java.lang.reflect.Field
 import java.lang.reflect.Modifier
-import java.util.*
+import java.util.IdentityHashMap
 import kotlin.reflect.KClass
+import org.mockito.Mockito
+import org.mockito.stubbing.Answer
+import org.objectweb.asm.Type
+import org.utbot.common.withAccessibility
 
 /**
  * Constructs values (including mocks) from models.
@@ -91,7 +121,7 @@ class MockValueConstructor(
         when (model) {
             is UtNullModel -> UtConcreteValue(null, model.classId.jClass)
             is UtPrimitiveModel -> UtConcreteValue(model.value, model.classId.jClass)
-            is UtEnumConstantModel -> UtConcreteValue(model.value)
+            is UtEnumConstantModel -> UtConcreteValue(constructEnum(model))
             is UtClassRefModel -> UtConcreteValue(model.value)
             is UtCompositeModel -> UtConcreteValue(constructObject(model), model.classId.jClass)
             is UtArrayModel -> UtConcreteValue(constructArray(model))
@@ -101,12 +131,22 @@ class MockValueConstructor(
     }
 
     /**
+     * Constructs an Enum<*> instance by model, uses reference-equality cache.
+     */
+    private fun constructEnum(model: UtEnumConstantModel): Any {
+        constructedObjects[model]?.let { return it }
+        constructedObjects[model] = model.value
+        return model.value
+    }
+
+    /**
      * Constructs object by model, uses reference-equality cache.
      *
      * Returns null for mock cause cannot instantiate it.
      */
     private fun constructObject(model: UtCompositeModel): Any {
         constructedObjects[model]?.let { return it }
+
         this.mockTarget?.let { mockTarget ->
             model.mocks.forEach { (methodId, models) ->
                 mockInfo += MockInfo(mockTarget, methodId, models.map { model ->
@@ -137,29 +177,20 @@ class MockValueConstructor(
             mockInstance
         }
 
-        model.fields.forEach { (field, fieldModel) ->
-            val declaredField =
-                javaClass.findFieldOrNull(field.name) ?: error("Can't find field: $field for $javaClass")
-            //error("FIELD NAME = ${declaredField.name} CLASS = ${javaClass.name}")
+        model.fields.forEach { (fieldId, fieldModel) ->
+            val declaredField = fieldId.jField
             val accessible = declaredField.isAccessible
             declaredField.isAccessible = true
 
             val modifiersField = Field::class.java.getDeclaredField("modifiers")
             modifiersField.isAccessible = true
-            //modifiersField.setInt(field, field.getModifiers() and Modifier.FINAL.inv())
-            modifiersField.setInt(declaredField, declaredField.modifiers and Modifier.FINAL.inv())
 
             val target = mockTarget(fieldModel) {
-                FieldMockTarget(fieldModel.classId.name, model.classId.name, UtConcreteValue(classInstance), field.name)
+                FieldMockTarget(fieldModel.classId.name, model.classId.name, UtConcreteValue(classInstance), fieldId.name)
             }
             val value = construct(fieldModel, target).value
             val instance = if (Modifier.isStatic(declaredField.modifiers)) null else classInstance
-            try {
-                declaredField.set(instance, value)
-            } catch (e: IllegalArgumentException) {
-                declaredField.set(instance, null)
-                //error("CLASS NAME = ${javaClass.name} MODEL = ${model.classId} $instance $value ${declaredField.type}")
-            }
+            declaredField.set(instance, value)
             declaredField.isAccessible = accessible
         }
 
@@ -267,7 +298,9 @@ class MockValueConstructor(
         constructedObjects[model]?.let { return it }
 
         with(model) {
-            val elementClassId = classId.elementClassId!!
+            val elementClassId = classId.elementClassId ?: error(
+                "Provided incorrect UtArrayModel without elementClassId. ClassId: ${model.classId}, model: $model"
+            )
             return when (elementClassId.jvmName) {
                 "B" -> ByteArray(length) { primitive(constModel) }.apply {
                     stores.forEach { (index, model) -> this[index] = primitive(model) }
@@ -368,7 +401,7 @@ class MockValueConstructor(
         val instanceClassId = instanceModel.classId
         val fieldModel = directSetterModel.fieldModel
 
-        val field = instance::class.java.findField(directSetterModel.fieldId.name)
+        val field = directSetterModel.fieldId.jField
         val isAccessible = field.isAccessible
 
         try {
@@ -408,10 +441,18 @@ class MockValueConstructor(
     }
 
     private fun MethodId.call(args: List<Any?>, instance: Any?): Any? =
-        method.invokeCatching(obj = instance, args = args).getOrThrow()
+        method.run {
+            withAccessibility {
+                invokeCatching(obj = instance, args = args).getOrThrow()
+            }
+        }
 
     private fun ConstructorId.call(args: List<Any?>): Any? =
-        constructor.newInstance(*args.toTypedArray())
+        constructor.run {
+            withAccessibility {
+                newInstance(*args.toTypedArray())
+            }
+        }
 
     /**
      * Fetches primitive value from NutsModel to create array of primitives.
