@@ -5,10 +5,14 @@ import edu.berkeley.cs.jqf.fuzz.ei.ZestGuidance
 import org.utbot.engine.displayName
 import org.utbot.engine.executeConcretely
 import org.utbot.engine.greyboxfuzzer.generator.*
+import org.utbot.engine.greyboxfuzzer.mutator.Mutator
+import org.utbot.engine.greyboxfuzzer.mutator.Seed
+import org.utbot.engine.greyboxfuzzer.mutator.SeedCollector
 import org.utbot.engine.greyboxfuzzer.util.CoverageCollector
 import org.utbot.engine.greyboxfuzzer.util.ZestUtils
 import org.utbot.engine.greyboxfuzzer.util.getAllDeclaredFields
 import org.utbot.engine.isStatic
+import org.utbot.engine.rawType
 import org.utbot.external.api.classIdForType
 import org.utbot.framework.concrete.UtConcreteExecutionResult
 import org.utbot.framework.concrete.UtExecutionInstrumentation
@@ -17,7 +21,6 @@ import org.utbot.framework.plugin.api.*
 import org.utbot.framework.plugin.api.util.signature
 import org.utbot.framework.plugin.api.util.utContext
 import org.utbot.instrumentation.ConcreteExecutor
-import org.utbot.instrumentation.util.WritingToKryoException
 import soot.Scene
 import soot.jimple.internal.JAssignStmt
 import soot.jimple.internal.JInstanceFieldRef
@@ -25,6 +28,7 @@ import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.ObjectInputStream
 import java.io.ObjectOutputStream
+import java.lang.reflect.ParameterizedType
 import java.util.*
 import kotlin.reflect.KClass
 import kotlin.reflect.KFunction
@@ -48,9 +52,11 @@ class ZestFuzzer(
      * Mean number of contiguous bytes to mutate in each mutation.
      */
     private val MEAN_MUTATION_SIZE = 4.0 // Bytes
+    val seeds = SeedCollector()
 
     suspend fun fuzz(): Sequence<List<UtModel>> {
         val kfunction = methodUnderTest.callable as KFunction<*>
+        println("STARTED TO FUZZ ${kfunction.name}")
         val method = kfunction.javaMethod!!
         val clazz = methodUnderTest.clazz
         //TODO!! DO NOT FORGET TO REMOVE IT
@@ -61,25 +67,24 @@ class ZestFuzzer(
                 val sig = it.bytecodeSignature.drop(1).dropLast(1).substringAfter("${clazz.jvmName}: ")
                 kfunction.javaMethod!!.signature == sig
             }
-//        val classFieldsUsedByFunc =
-//            sootMethod!!.activeBody.units
-//                .asSequence()
-//                .mapNotNull { it as? JAssignStmt }
-//                .map { it.rightBox.value }
-//                .mapNotNull { it as? JInstanceFieldRef }
-//                .mapNotNull { fieldRef -> clazz.java.getAllDeclaredFields().find { it.name == fieldRef.field.name } }
-//                .toSet()
+        val classFieldsUsedByFunc =
+            sootMethod!!.activeBody.units
+                .asSequence()
+                .mapNotNull { it as? JAssignStmt }
+                .map { it.rightBox.value }
+                .mapNotNull { it as? JInstanceFieldRef }
+                .mapNotNull { fieldRef -> clazz.java.getAllDeclaredFields().find { it.name == fieldRef.field.name } }
+                .toSet()
 
-        val methodLines = sootMethod!!.activeBody.units.map { it.javaSourceStartLineNumber }.filter { it != -1 }.toSet()
+        val methodLines = sootMethod.activeBody.units.map { it.javaSourceStartLineNumber }.filter { it != -1 }.toSet()
         var maxCoverage = 0
-        val repeatTimes = 10
+        val repeatTimes = 100
         repeat(repeatTimes) {
             println("EXECUTION NUMBER $it")
-            if (thisInstance != null) {
-//                InstancesGenerator.regenerateFields(clazz.java, thisInstance, classFieldsUsedByFunc.toList())
-//                ZestUtils.setUnserializableFieldsToNull(thisInstance)
+            if (thisInstance != null && it != 0) {
+                InstancesGenerator.regenerateFields(clazz.java, thisInstance!!, classFieldsUsedByFunc.toList())
+                ZestUtils.setUnserializableFieldsToNull(thisInstance!!)
             }
-            println()
             val generatedParameters =
                 method.parameters.mapIndexed { index, parameter ->
                     DataGenerator.generate(
@@ -89,18 +94,20 @@ class ZestFuzzer(
                         DataGeneratorSettings.genStatus
                     ) to classIdForType(parameter.type)
                 }
+            val m = IdentityHashMap<Any, UtModel>()
+            val modelConstructor = UtModelConstructor(m)
             val generatedParameterAsUtModel = generatedParameters.map {
                 if (it.first == null) {
                     UtNullModel(it.second)
                 } else {
                     try {
                         ZestUtils.setUnserializableFieldsToNull(it.first!!.value)
-                        UtModelConstructor(IdentityHashMap()).construct(it.first!!.value, it.second)
+                        modelConstructor.construct(it.first!!.value, it.second)
                     } catch (e: Throwable) {
                         UtNullModel(it.second)
                     }
                 }
-            }
+            }.toMutableList()
             //TODO regenerate fiels of thisInstance
 //            if (it != 0 && Random().nextBoolean() && thisInstance != null) {
 //                //InstancesGenerator.regenerateRandomFields(clazz.java, thisInstance)
@@ -110,25 +117,6 @@ class ZestFuzzer(
                 EnvironmentModels(thisInstanceAsUtModel, generatedParameterAsUtModel, mapOf())
             println("EXECUTING FUNCTION ${method.name}")
             try {
-//                while (true) {
-//                    try {
-//                        val tmpInitialEnvironmentModels =
-//                            EnvironmentModels(thisInstanceAsUtModel, generatedParameterAsUtModel, mapOf())
-//                        val executor =
-//                            ConcreteExecutor(
-//                                UtExecutionInstrumentation,
-//                                concreteExecutor.pathsToUserClasses,
-//                                concreteExecutor.pathsToDependencyClasses
-//                            ).apply { this.classLoader = utContext.classLoader }
-//                        executor.executeConcretely(methodUnderTest, tmpInitialEnvironmentModels, listOf())
-//                        break
-//                    } catch (e: WritingToKryoException) {
-//
-//                        thisInstanceAsUtModel = createUtModelFromThis(thisInstance, clazz.java)
-//                    } catch (e: Throwable) {
-//                        break
-//                    }
-//                }
                 val executor =
                     ConcreteExecutor(
                         UtExecutionInstrumentation,
@@ -138,6 +126,7 @@ class ZestFuzzer(
                 val executionResult =
                     executor.executeConcretely(methodUnderTest, initialEnvironmentModels, listOf())
                 println("EXEC RES = ${executionResult.result}")
+                exitProcess(0)
                 val coveredLines = executionResult.coverage.coveredInstructions.map { it.lineNumber }.toSet()
                 println("EXECUTOR = ${executor.instrumentation}")
                 executionResult.coverage.coveredInstructions.forEach { CoverageCollector.coverage.add(it) }
@@ -157,17 +146,40 @@ class ZestFuzzer(
             } catch (e: Error) {
                 println("Error :(")
             } catch (e: Exception) {
-                thisInstance = InstancesGenerator.generateInstanceWithUnsafe(clazz.java, 0, true)
+                //thisInstance = InstancesGenerator.generateInstanceWithUnsafe(clazz.java, 0, true)
 //                if (e is WritingToKryoException && thisInstance != null) {
 //                    tryToRepairThisInstance(thisInstance, generatedParameterAsUtModel, clazz)
 //                }
                 println("Exception in ${methodUnderTest.displayName} :( $e")
-                //exitProcess(0)
+                exitProcess(0)
             }
             println("--------------------------------")
         }
         println("MAX COVERAGE = $maxCoverage")
         return sequenceOf()
+    }
+
+
+    private suspend fun execute(stateBefore: EnvironmentModels, methodUnderTest: UtMethod<*>): UtConcreteExecutionResult? =
+        try {
+            val executor =
+                ConcreteExecutor(
+                    UtExecutionInstrumentation,
+                    concreteExecutor.pathsToUserClasses,
+                    concreteExecutor.pathsToDependencyClasses
+                ).apply { this.classLoader = utContext.classLoader }
+            executor.executeConcretely(methodUnderTest, stateBefore, listOf())
+        } catch (e: Throwable) {
+            println("Exception in ${methodUnderTest.displayName} :( $e")
+            null
+        }
+
+    fun explorationStage(): List<Seed> {
+        return emptyList()
+    }
+
+    fun exploitationStage() {
+
     }
 
     private suspend fun tryToRepairThisInstance(
@@ -185,7 +197,7 @@ class ZestFuzzer(
                 concreteExecutor.pathsToUserClasses,
                 concreteExecutor.pathsToDependencyClasses
             ).apply { this.classLoader = utContext.classLoader }
-        executor.executeConcretely(methodUnderTest, newInitialEnvironmentModels, listOf())
+        //executor.executeConcretely(methodUnderTest, newInitialEnvironmentModels, listOf())
         return thisInstance
     }
 
