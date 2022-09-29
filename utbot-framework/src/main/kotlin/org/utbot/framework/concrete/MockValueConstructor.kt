@@ -353,6 +353,12 @@ class MockValueConstructor(
     private fun constructFromAssembleModel(assembleModel: UtAssembleModel): Any {
         constructedObjects[assembleModel]?.let { return it }
 
+        assembleModel.initialInstance?.let {
+            val value = construct(it, null).value
+            if (value != null) {
+                resultsCache[it] = value
+            }
+        }
         assembleModel.allStatementsChain.forEach { statementModel ->
             when (statementModel) {
                 is UtExecutableCallModel -> updateWithExecutableCallModel(statementModel, assembleModel)

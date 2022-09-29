@@ -2,12 +2,16 @@ package org.utbot.engine.greyboxfuzzer.generator
 
 import com.pholser.junit.quickcheck.generator.ComponentizedGenerator
 import com.pholser.junit.quickcheck.generator.GenerationStatus
+import com.pholser.junit.quickcheck.generator.Generator
 import com.pholser.junit.quickcheck.internal.ParameterTypeContext
 import com.pholser.junit.quickcheck.internal.generator.ZilchGenerator
 import com.pholser.junit.quickcheck.random.SourceOfRandomness
 import org.utbot.engine.greyboxfuzzer.util.getAllDeclaredFields
 import org.utbot.engine.greyboxfuzzer.util.getFieldValue
 import org.utbot.engine.greyboxfuzzer.util.hasModifiers
+import org.utbot.external.api.classIdForType
+import org.utbot.framework.concrete.UtModelConstructor
+import org.utbot.framework.plugin.api.UtNullModel
 import java.lang.reflect.Modifier
 import java.lang.reflect.Parameter
 
@@ -16,17 +20,40 @@ object DataGenerator {
     val generatorRepository = DataGeneratorSettings.generatorRepository
 
     fun generate(
+        parameterTypeContext: ParameterTypeContext,
         parameter: Parameter,
         parameterIndex: Int,
+        utModelConstructor: UtModelConstructor,
         random: SourceOfRandomness,
         status: GenerationStatus
-    ): FParameter? {
-        generatorRepository.removeGenerator(Any::class.java)
+    ): FParameter {
+        val generator = generatorRepository.getOrProduceGenerator(parameterTypeContext, parameterIndex)
+        return generate(generator, parameter, utModelConstructor, random, status)
+    }
+    fun generate(
+        parameter: Parameter,
+        parameterIndex: Int,
+        utModelConstructor: UtModelConstructor,
+        random: SourceOfRandomness,
+        status: GenerationStatus
+    ): FParameter {
         //TODO INPUT RANDOM TYPES INSTEAD OF TYPE PARAMETERS
         val generator =
             generatorRepository.getOrProduceGenerator(parameter, parameterIndex)
                 ?.also { GeneratorConfigurator.configureGenerator(it, 80) }
-        var generatedValue: Any? = null
+        return generate(generator, parameter, utModelConstructor, random, status)
+    }
+
+    private fun generate(
+        generator: Generator<*>?,
+        parameter: Parameter,
+        utModelConstructor: UtModelConstructor,
+        random: SourceOfRandomness,
+        status: GenerationStatus,
+    ): FParameter {
+        generatorRepository.removeGenerator(Any::class.java)
+        val classId = classIdForType(parameter.type)
+        var generatedValue: Any?
         repeat(3) {
             println("TRY $it")
             generatedValue = try {
@@ -43,6 +70,7 @@ object DataGenerator {
                 return FParameter(
                     parameter,
                     generatedValue!!,
+                    utModelConstructor.construct(generatedValue, classIdForType(generatedValue!!.javaClass)),
                     generator,
                     //emptyList()
                     parameter.type.getFFieldsForClass(generatedValue!!, 0)
@@ -50,10 +78,8 @@ object DataGenerator {
             }
             //generator.generate(random, status)?.let { generatedValue = it; return@repeat }
         }
-        return null
-        throw IllegalStateException("Cant generate value of type ${parameter.type}")
+        return FParameter(parameter, null, UtNullModel(classId), generator, classId, listOf())
     }
-
 
     //TODO Make it work with type parameters
     private fun Class<*>.getFFieldsForClass(value: Any, depth: Int): List<FField> {

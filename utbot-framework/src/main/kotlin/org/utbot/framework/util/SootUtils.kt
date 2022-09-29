@@ -3,18 +3,49 @@ package org.utbot.framework.plugin.api
 import org.utbot.api.mock.UtMock
 import org.utbot.common.FileUtil
 import org.utbot.engine.UtNativeStringWrapper
-import org.utbot.engine.overrides.*
+import org.utbot.engine.jimpleBody
+import org.utbot.engine.overrides.Boolean
+import org.utbot.engine.overrides.Byte
+import org.utbot.engine.overrides.Character
+import org.utbot.engine.overrides.Class
+import org.utbot.engine.overrides.Integer
+import org.utbot.engine.overrides.Long
+import org.utbot.engine.overrides.PrintStream
+import org.utbot.engine.overrides.Short
+import org.utbot.engine.overrides.System
+import org.utbot.engine.overrides.UtArrayMock
+import org.utbot.engine.overrides.UtLogicMock
+import org.utbot.engine.overrides.strings.UtString
+import org.utbot.engine.overrides.strings.UtStringBuffer
+import org.utbot.engine.overrides.strings.UtStringBuilder
+import org.utbot.engine.overrides.collections.AssociativeArray
+import org.utbot.engine.overrides.collections.RangeModifiableUnlimitedArray
+import org.utbot.engine.overrides.collections.UtArrayList
+import org.utbot.engine.overrides.collections.UtGenericAssociative
+import org.utbot.engine.overrides.collections.UtHashMap
+import org.utbot.engine.overrides.collections.UtHashSet
+import org.utbot.engine.overrides.collections.UtLinkedList
+import org.utbot.engine.overrides.UtOverrideMock
+import org.utbot.engine.overrides.collections.Collection
+import org.utbot.engine.overrides.collections.List
+import org.utbot.engine.overrides.collections.UtGenericStorage
+import org.utbot.engine.overrides.collections.UtOptional
+import org.utbot.engine.overrides.collections.UtOptionalDouble
+import org.utbot.engine.overrides.collections.UtOptionalInt
+import org.utbot.engine.overrides.collections.UtOptionalLong
+import org.utbot.engine.overrides.stream.Arrays
+import org.utbot.engine.overrides.stream.Stream
+import org.utbot.engine.overrides.stream.UtStream
 import org.utbot.engine.pureJavaSignature
 import org.utbot.framework.plugin.api.UtMethod
 import org.utbot.framework.plugin.api.util.signature
-import java.io.File
-import java.nio.file.Path
-import kotlin.reflect.KClass
 import soot.G
 import soot.PackManager
 import soot.Scene
 import soot.SootClass
+import soot.jimple.JimpleBody
 import soot.options.Options
+import soot.toolkits.graph.ExceptionalUnitGraph
 import java.io.File
 import java.nio.file.Path
 import java.util.jar.JarInputStream
@@ -52,7 +83,7 @@ object SootUtils {
             set_full_resolver(true)
         }
 
-        addBasicClasses(*classesToLoad.toTypedArray())
+        addBasicClasses(*classesToLoad)
         addLibraryClasses(libraryClassesToLoad)
         loadJavaStdLibClasses()
 
@@ -65,21 +96,40 @@ object SootUtils {
         }
     }
 
-    fun JimpleBody.graph() = ExceptionalUnitGraph(this)
-
-    fun jimpleBody(method: UtMethod<*>): JimpleBody {
-        val clazz = Scene.v().classes.single { it.name == method.clazz.java.name }
-        val signature = method.callable.signature
-        val sootMethod = clazz.methods.single { it.pureJavaSignature == signature }
-
-        return sootMethod.jimpleBody()
-    }
-
     private fun addBasicClasses(vararg classes: KClass<*>) {
         classes.forEach {
             Scene.v().addBasicClass(it.qualifiedName, SootClass.BODIES)
         }
     }
+
+    private fun addLibraryClasses(classesNames: kotlin.collections.List<String>) {
+        classesNames.forEach {
+            Scene.v().addBasicClass(it, SootClass.BODIES)
+        }
+    }
+    private fun loadJavaStdLibClasses() {
+        val libraryClasses = mutableListOf<String>()
+        val jars = File("/usr/lib/jvm/java-8-openjdk/jre/lib/").listFiles()
+            .toList()
+            .filter { it.path.endsWith(".jar") }
+        for (jar in jars) {
+            val inputStream = JarInputStream(jar.inputStream())
+            var entry = inputStream.nextEntry
+            while (entry != null) {
+                if (!entry.isDirectory && entry.name.endsWith(".class")) {
+                    // This ZipEntry represents a class. Now, what class does it represent?
+                    val className: String = entry.name.replace('/', '.') // including ".class"
+                    libraryClasses.add(className)
+                }
+                entry = inputStream.nextEntry
+            }
+        }
+        libraryClasses.forEach {
+            Scene.v().addBasicClass(it, SootClass.BODIES)
+        }
+    }
+
+    val libraryClassesToLoad = mutableListOf<String>()
 
     private val classesToLoad = arrayOf(
         UtMock::class,
@@ -130,4 +180,14 @@ object SootUtils {
         UtStream::class,
         UtStream.UtStreamIterator::class
     )
+}
+
+fun JimpleBody.graph() = ExceptionalUnitGraph(this)
+
+fun jimpleBody(method: UtMethod<*>): JimpleBody {
+    val clazz = Scene.v().classes.single { it.name == method.clazz.java.name }
+    val signature = method.callable.signature
+    val sootMethod = clazz.methods.single { it.pureJavaSignature == signature }
+
+    return sootMethod.jimpleBody()
 }

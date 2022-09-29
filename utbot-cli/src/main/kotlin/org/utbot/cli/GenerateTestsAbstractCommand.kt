@@ -162,7 +162,7 @@ abstract class GenerateTestsAbstractCommand(name: String, help: String) :
         sourceCodeFile: Path? = null,
         searchDirectory: Path,
         chosenClassesToMockAlways: Set<ClassId>
-    ): List<UtMethodTestSet> = {
+    ): List<UtMethodTestSet> {
         CustomClassLoader.classLoader = classLoader
         return testCaseGenerator.generate(
             targetMethods,

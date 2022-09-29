@@ -24,7 +24,8 @@ public class GraphExample {
         graph.addEdge(2, 3);
         graph.addEdge(3, 3);
 
-        return GraphAlgorithms.bfs(graph, 0, 3);
+       // return GraphAlgorithms.bfs(graph, 0, 3);
+        return false;
     }
     public boolean runFindCycle(Pair[] additionalEdges) {
         Graph graph = new Graph();

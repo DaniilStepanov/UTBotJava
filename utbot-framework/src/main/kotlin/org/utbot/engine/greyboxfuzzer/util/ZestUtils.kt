@@ -5,7 +5,14 @@ import org.utbot.instrumentation.util.TunedKryo
 object ZestUtils {
     fun setUnserializableFieldsToNull(instance: Any): Boolean {
         val tunedKryo = TunedKryo()
-        val fields = instance::class.java.getAllDeclaredFieldsRecursive(instance).reversed()
+        val fields =
+            try {
+                instance::class.java.getAllDeclaredFieldsRecursive(instance).reversed()
+            } catch (e: Throwable) {
+                println("CANT GET FIELDS OF $instance")
+                e.printStackTrace()
+                return false
+            }
         for (field in fields) {
             val fieldValue =
                 field.second.getFieldValue(field.first) ?: continue//field.getFieldValue(myThisInstance) ?: continue

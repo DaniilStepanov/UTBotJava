@@ -13,19 +13,6 @@ import com.jetbrains.rd.util.lifetime.Lifetime
 import com.jetbrains.rd.util.lifetime.throwIfNotAlive
 import org.utbot.framework.plugin.api.TimeoutException
 import java.io.ByteArrayOutputStream
-import java.io.Closeable
-import java.io.InputStream
-import java.io.OutputStream
-import java.lang.reflect.InvocationHandler
-import java.util.GregorianCalendar
-import org.objenesis.instantiator.ObjectInstantiator
-import org.objenesis.strategy.StdInstantiatorStrategy
-import sun.misc.Unsafe
-import sun.reflect.generics.reflectiveObjects.GenericArrayTypeImpl
-import sun.reflect.generics.reflectiveObjects.ParameterizedTypeImpl
-import java.lang.reflect.Field
-import java.lang.reflect.Modifier
-import java.lang.reflect.Type
 
 /**
  * Helpful class for working with the kryo.

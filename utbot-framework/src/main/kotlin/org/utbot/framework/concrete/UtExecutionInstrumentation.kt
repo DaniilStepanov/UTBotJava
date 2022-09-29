@@ -44,7 +44,9 @@ import java.security.ProtectionDomain
 import java.time.LocalDateTime
 import java.util.IdentityHashMap
 import org.objectweb.asm.Type
+import org.utbot.framework.util.singleValue
 import kotlin.reflect.jvm.javaMethod
+import kotlin.system.exitProcess
 
 /**
  * Consists of the data needed to execute the method concretely. Also includes method arguments stored in models.

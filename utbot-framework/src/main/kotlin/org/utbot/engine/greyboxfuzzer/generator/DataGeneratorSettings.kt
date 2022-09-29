@@ -13,6 +13,7 @@ import org.utbot.engine.greyboxfuzzer.generator.map.HashtableGenerator
 import org.utbot.engine.greyboxfuzzer.generator.map.LinkedHashMapGenerator
 import org.utbot.engine.greyboxfuzzer.generator.set.HashSetGenerator
 import org.utbot.engine.greyboxfuzzer.generator.set.LinkedHashSetGenerator
+import java.io.Closeable
 import java.util.*
 
 object DataGeneratorSettings {
@@ -20,6 +21,7 @@ object DataGeneratorSettings {
     val sourceOfRandomness = SourceOfRandomness(Random(42))
     val generatorRepository =
         UTGeneratorRepository(sourceOfRandomness).register(ServiceLoaderGeneratorSource()).also {
+            it.removeGenerator(Closeable::class.java)
             it.replaceGenerator(
                 Map::class.java,
                 setOf(HashtableGenerator(), HashMapGenerator(), LinkedHashMapGenerator())

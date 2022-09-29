@@ -10,7 +10,10 @@ repositories {
 //noinspection GroovyAssignabilityCheck
 configurations {
     z3native
+    fetchInstrumentationJar
 }
+
+
 
 dependencies {
 
@@ -50,6 +53,7 @@ dependencies {
     //FOR MY TESTS
     implementation group: 'org.jgrapht', name: 'jgrapht-core', version: '1.0.1'
     implementation group: 'org.jgrapht', name: 'jgrapht-ext', version: '1.0.1'
+    fetchInstrumentationJar project(path: ':utbot-instrumentation', configuration:'instrumentationArchive')
 }
 
 processResources {
@@ -57,5 +61,8 @@ processResources {
         from(zipTree(artifact.getFile())) {
             into "lib/x64"
         }
+    }
+    from(configurations.fetchInstrumentationJar) {
+        into "lib"
     }
 }

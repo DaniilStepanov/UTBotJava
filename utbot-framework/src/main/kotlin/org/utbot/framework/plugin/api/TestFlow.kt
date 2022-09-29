@@ -57,6 +57,7 @@ class TestFlow internal constructor(block: TestFlow.() -> Unit) {
         3. If both (fuzzer and symbolic execution) are off then do nothing.
      */
     fun build(engine: UtBotSymbolicEngine): Flow<UtResult>  {
+        return engine.fuzzing()
         return when {
             generationTimeout == 0L -> emptyFlow()
             isFuzzingEnabled -> {

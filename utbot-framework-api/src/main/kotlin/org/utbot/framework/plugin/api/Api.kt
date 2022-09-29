@@ -498,7 +498,8 @@ data class UtAssembleModel(
     override val modelName: String,
     val instantiationChain: List<UtStatementModel> = emptyList(),
     val modificationsChain: List<UtStatementModel> = emptyList(),
-    val origin: UtCompositeModel? = null
+    val origin: UtCompositeModel? = null,
+    val initialInstance: UtReferenceModel? = null
 ) : UtReferenceModel(id, classId, modelName) {
     val allStatementsChain
         get() = instantiationChain + modificationsChain

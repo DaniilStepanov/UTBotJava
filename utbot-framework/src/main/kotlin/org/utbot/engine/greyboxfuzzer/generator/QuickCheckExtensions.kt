@@ -1,3 +1,5 @@
+@file:Suppress("JAVA_MODULE_DOES_NOT_EXPORT_PACKAGE")
+
 package org.utbot.engine.greyboxfuzzer.generator
 
 import com.pholser.junit.quickcheck.generator.ComponentizedGenerator
@@ -88,21 +90,24 @@ fun GeneratorRepository.getOrProduceGenerator(field: Field, depth: Int = 0): Gen
     getOrProduceGenerator(ParameterTypeContext.forField(field), depth)
 
 fun GeneratorRepository.getOrProduceGenerator(param: Parameter, parameterIndex: Int, depth: Int = 0): Generator<*>? {
-    val parameterTypeContext = try {
-        ParameterTypeContext.forParameter(param)
+    val parameterTypeContext = param.createParameterTypeContext(parameterIndex)
+    return getOrProduceGenerator(parameterTypeContext, depth)
+}
+
+fun Parameter.createParameterTypeContext(parameterIndex: Int): ParameterTypeContext =
+    try {
+        ParameterTypeContext.forParameter(this)
     } catch (e: TypeValidationException) {
-        val clazz = param.type
+        val clazz = this.type
         val parametersBounds =
-            param.type.typeParameters.map { it.bounds.firstOrNull() ?: Any::class.java.rawType }.toTypedArray()
+            this.type.typeParameters.map { it.bounds.firstOrNull() ?: Any::class.java.rawType }.toTypedArray()
         val p = ru.vyarus.java.generics.resolver.context.container.ParameterizedTypeImpl(
-            param.type,
+            this.type,
             *parametersBounds
         )
         val genericContext = createGenericsContext(p, clazz)
-        createParameterContextForParameter(param, parameterIndex, genericContext, p)
+        createParameterContextForParameter(this, parameterIndex, genericContext, p)
     }
-    return getOrProduceGenerator(parameterTypeContext, depth)
-}
 
 
 fun GeneratorRepository.getOrProduceGenerator(clazz: Class<*>, depth: Int = 0): Generator<*>? =

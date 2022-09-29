@@ -22,6 +22,9 @@ import org.utbot.common.bracket
 import org.utbot.common.debug
 import org.utbot.common.workaround
 import org.utbot.engine.MockStrategy.NO_MOCKS
+import org.utbot.engine.greyboxfuzzer.GreyBoxFuzzer
+import org.utbot.engine.greyboxfuzzer.generator.InstancesGenerator
+import org.utbot.engine.greyboxfuzzer.util.ZestUtils
 import org.utbot.engine.pc.UtArraySelectExpression
 import org.utbot.engine.pc.UtBoolExpression
 import org.utbot.engine.pc.UtContextInitializer
@@ -58,50 +61,16 @@ import org.utbot.framework.UtSettings.useDebugVisualization
 import org.utbot.framework.concrete.UtConcreteExecutionData
 import org.utbot.framework.concrete.UtConcreteExecutionResult
 import org.utbot.framework.concrete.UtExecutionInstrumentation
-import org.utbot.framework.plugin.api.ClassId
-import org.utbot.framework.plugin.api.ConcreteExecutionFailureException
-import org.utbot.framework.plugin.api.EnvironmentModels
-import org.utbot.framework.plugin.api.Instruction
-import org.utbot.framework.plugin.api.MissingState
+import org.utbot.framework.plugin.api.*
 import org.utbot.framework.plugin.api.Step
-import org.utbot.framework.plugin.api.UtAssembleModel
-import org.utbot.framework.plugin.api.UtConcreteExecutionFailure
-import org.utbot.framework.plugin.api.UtError
-import org.utbot.framework.plugin.api.UtExecution
-import org.utbot.framework.plugin.api.UtInstrumentation
-import org.utbot.framework.plugin.api.UtMethod
-import org.utbot.framework.plugin.api.UtNullModel
-import org.utbot.framework.plugin.api.UtOverflowFailure
-import org.utbot.framework.plugin.api.UtResult
-import org.utbot.framework.plugin.api.UtSymbolicExecution
-import org.utbot.framework.plugin.api.onSuccess
-import org.utbot.framework.util.graph
 import org.utbot.framework.plugin.api.util.executableId
 import org.utbot.framework.plugin.api.util.id
 import org.utbot.framework.plugin.api.util.utContext
 import org.utbot.framework.plugin.api.util.description
-import org.utbot.framework.util.jimpleBody
-import org.utbot.framework.plugin.api.util.voidClassId
-import org.utbot.fuzzer.FallbackModelProvider
-import org.utbot.fuzzer.FuzzedMethodDescription
-import org.utbot.fuzzer.FuzzedValue
-import org.utbot.fuzzer.ModelProvider
-import org.utbot.fuzzer.ReferencePreservingIntIdGenerator
-import org.utbot.fuzzer.Trie
-import org.utbot.fuzzer.TrieBasedFuzzerStatistics
-import org.utbot.fuzzer.UtFuzzedExecution
-import org.utbot.fuzzer.withMutations
-import org.utbot.fuzzer.collectConstantsForFuzzer
-import org.utbot.fuzzer.defaultModelProviders
-import org.utbot.fuzzer.defaultModelMutators
-import org.utbot.fuzzer.flipCoin
-import org.utbot.fuzzer.fuzz
-import org.utbot.fuzzer.providers.ObjectModelProvider
+import org.utbot.fuzzer.*
 import org.utbot.instrumentation.ConcreteExecutor
 import soot.jimple.Stmt
-import soot.tagkit.ParamNamesTag
 import java.lang.reflect.Method
-import kotlin.random.Random
 import kotlin.system.measureTimeMillis
 
 val logger = KotlinLogging.logger {}
@@ -512,8 +481,7 @@ class UtBotSymbolicEngine(
 //    }
 
     //Simple fuzzing
-    fun fuzzing(modelProvider: (ModelProvider) -> ModelProvider = { it }) = flow<UtResult> {
-        println("FUZZING STARTED")
+    fun fuzzing(until: Long = Long.MAX_VALUE, modelProvider: (ModelProvider) -> ModelProvider = { it }) = flow<UtResult> {
         val executableId = if (methodUnderTest.isConstructor) {
             methodUnderTest.javaConstructor!!.executableId
         } else {
@@ -528,7 +496,8 @@ class UtBotSymbolicEngine(
             return@flow
         }
 
-        val fallbackModelProvider = FallbackModelProvider { nextDefaultModelId++ }
+        val g = ReferencePreservingIntIdGenerator()
+        val fallbackModelProvider = FallbackModelProvider(g)
 
         val thisInstance = when {
             methodUnderTest.isStatic -> null
@@ -552,7 +521,7 @@ class UtBotSymbolicEngine(
         val methodUnderTestDescription = FuzzedMethodDescription(executableId, collectConstantsForFuzzer(graph))
         //val modelProviderWithFallback = modelProvider(defaultModelProviders { nextDefaultModelId++ }).withFallback(fallbackModelProvider::toModel)
         val coveredInstructionTracker = mutableSetOf<Instruction>()
-        var attempts = UtSettings.fuzzingMaxAttemps
+        //var attempts = UtSettings.fuzzingMaxAttemps
 
         val clazz = methodUnderTest.clazz.java
         var myThisInstance =
@@ -563,9 +532,18 @@ class UtBotSymbolicEngine(
             } else {
                 null
             }
-        if (myThisInstance != null && !ZestUtils.setUnserializableFieldsToNull(myThisInstance)) {
+        try {
+            if (myThisInstance != null) {
+                if (!ZestUtils.setUnserializableFieldsToNull(myThisInstance)) {
+                    myThisInstance = thisInstance
+                }
+            }
+        } catch (e: Throwable) {
             myThisInstance = thisInstance
         }
+//        if (myThisInstance != null && !ZestUtils.setUnserializableFieldsToNull(myThisInstance)) {
+//            myThisInstance = thisInstance
+//        }
 //            if (!methodUnderTest.isStatic) {
 //                InstancesGenerator.generateInstanceWithUnsafe(clazz, 0, true)?.let {
 //                    println()
@@ -594,7 +572,7 @@ class UtBotSymbolicEngine(
 
 //        println("THIS INSTANCE = ${myThisInstance?.toString()}")
         try {
-            ZestFuzzer(concreteExecutor, methodUnderTest, listOf(), myThisInstance).fuzz()
+            GreyBoxFuzzer(concreteExecutor, methodUnderTest, listOf(), myThisInstance).fuzz()
         } catch (e: CancellationException) {
             logger.debug { "Cancelled by timeout" }
         } catch (e: ConcreteExecutionFailureException) {
@@ -774,7 +752,7 @@ private fun ResolvedModels.constructStateForMethod(methodUnderTest: UtMethod<*>)
     return EnvironmentModels(thisInstanceBefore, paramsBefore, statics)
 }
 
-private suspend fun ConcreteExecutor<UtConcreteExecutionResult, UtExecutionInstrumentation>.executeConcretely(
+suspend fun ConcreteExecutor<UtConcreteExecutionResult, UtExecutionInstrumentation>.executeConcretely(
     methodUnderTest: UtMethod<*>,
     stateBefore: EnvironmentModels,
     instrumentation: List<UtInstrumentation>

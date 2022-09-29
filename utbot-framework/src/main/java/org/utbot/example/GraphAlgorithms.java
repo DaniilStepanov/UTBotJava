@@ -54,18 +54,15 @@ public class GraphAlgorithms<T extends Number> {
     }
 
 
-    public boolean testFunc3(char[] ca, int[] sa) {
-        int c = 0;
-        for (Double aDouble : arr2) {
-            c += 1 + aDouble.intValue();
+    public boolean testFunc3(ArrayList<Integer> a) {
+        if (a.get(0) == 0) {
+            if (a.get(1) == 1) {
+                if (a.get(2) == 2) {
+                    return false;
+                }
+            }
         }
-        System.out.println("C = " + c);
-//        for (int i = 0; i < array.size() - 1; i++) {
-//            if (array.get(i).a > array.get(i + 1).a) {
-//                return true;
-//            }
-//        }
-        return false;
+        return true;
     }
 //    public boolean testFunc3(java.util.concurrent.BlockingQueue<java.lang.Runnable> a) {
 //        for (int i = 0; i < array.size() - 1; i++) {

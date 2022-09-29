@@ -1,36 +1,30 @@
 package org.utbot.engine.greyboxfuzzer
 
-import org.jgrapht.graph.SimpleDirectedGraph
+import org.junit.jupiter.api.Assertions
 import org.utbot.common.FileUtil
+import org.utbot.common.PathUtil.getUrlsFromClassLoader
+import org.utbot.engine.greyboxfuzzer.PredefinedGeneratorParameters.getMethodByName
 import org.utbot.example.GraphAlgorithms
-import org.utbot.example.JpegReaderTest
 import org.utbot.example.PrimitiveFields
-import org.utbot.example.algorithms.ArraysQuickSort
-import org.utbot.example.algorithms.BinarySearch
-import org.utbot.example.casts.GenericCastExample
-import org.utbot.example.codegen.deepequals.DeepEqualsTestingClass
-import org.utbot.example.jdk.SetsTest
-import org.utbot.example.mixed.Simplifier
-import org.utbot.external.api.TestMethodInfo
-import org.utbot.external.api.UtBotJavaApi.fuzzingTestCases
+import org.utbot.external.api.*
+import org.utbot.external.api.UtBotJavaApi.fuzzingTestSets
+import org.utbot.external.api.UtBotJavaApi.generate
 import org.utbot.external.api.UtBotJavaApi.stopConcreteExecutorOnExit
-import org.utbot.external.api.UtModelFactory
-import org.utbot.external.api.classIdForType
+import org.utbot.framework.concrete.UtExecutionInstrumentation
 import org.utbot.framework.plugin.api.*
+import org.utbot.framework.plugin.api.SootUtils.runSoot
 import org.utbot.framework.plugin.api.util.UtContext
 import org.utbot.framework.plugin.api.util.UtContext.Companion.setUtContext
+import org.utbot.framework.plugin.api.util.withUtContext
 import java.io.File
 import java.lang.reflect.Method
+import java.net.URISyntaxException
 import java.net.URL
-import java.net.URLClassLoader
-import java.nio.file.Files
 import java.nio.file.Path
-import java.nio.file.Paths
 import java.util.*
 import java.util.stream.Collectors
 import kotlin.io.path.ExperimentalPathApi
-import kotlin.io.path.name
-import kotlin.streams.toList
+import kotlin.system.exitProcess
 
 class FuzzerExecutor {
 
@@ -38,45 +32,55 @@ class FuzzerExecutor {
     private val modelFactory: UtModelFactory
 
     init {
-        SootUtils.runSoot(PrimitiveFields::class.java)
-        context = setUtContext(UtContext(PrimitiveFields::class.java.classLoader))
+        SootUtils.runSoot(GraphAlgorithms::class.java)
+        context = setUtContext(UtContext(GraphAlgorithms::class.java.classLoader))
         modelFactory = UtModelFactory()
     }
 
     fun testSimpleFuzzing(clazz: Class<*>, funName: String) {
+
+
+        //runSoot(StringSwitchExample::class.java)
         stopConcreteExecutorOnExit = false
-        val classpath: String = getClassPath(clazz)
-        val dependencyClassPath: String = getDependencyClassPath()
-        val classUnderTestModel: UtCompositeModel = modelFactory.produceCompositeModel(
+
+        val classpath = getClassPath(clazz)
+        val dependencyClassPath = getDependencyClassPath()
+
+        val classUnderTestModel = modelFactory.produceCompositeModel(
             classIdForType(clazz)
         )
-        val methodUnderTest = PredefinedGeneratorParameters.getMethodByName(
+
+        val methodUnderTest: Method = getMethodByName(
             clazz, funName
         )
-        val models: IdentityHashMap<UtModel, UtModel> = modelFactory.produceAssembleModel(
+
+        val models = modelFactory.produceAssembleModel(
             methodUnderTest,
             clazz, listOf(classUnderTestModel)
         )
+
         val methodState = EnvironmentModels(
             models[classUnderTestModel],
             Arrays.asList(UtPrimitiveModel("initial model"), UtPrimitiveModel(-10), UtPrimitiveModel(0)), emptyMap()
         )
+
         val methodInfo = TestMethodInfo(
             methodUnderTest,
             methodState
         )
-        val utTestCases1: List<UtTestCase> = fuzzingTestCases(
+
+        val testSets1: List<UtMethodTestSet> = fuzzingTestSets(
             listOf(
                 methodInfo
             ),
             clazz,
             classpath,
-            dependencyClassPath,
+            dependencyClassPath!!,
             MockStrategyApi.OTHER_PACKAGES,
-            100000L
+            3000L
         ) { type: Class<*> ->
             if (Int::class.javaPrimitiveType == type || Int::class.java == type) {
-                return@fuzzingTestCases Arrays.asList<Any>(
+                return@fuzzingTestSets Arrays.asList<Any>(
                     0,
                     Int.MIN_VALUE,
                     Int.MAX_VALUE
@@ -84,9 +88,69 @@ class FuzzerExecutor {
             }
             null
         }
+
+//        val generate = generate(
+//            listOf(methodInfo),
+//            testSets1,
+//            org.utbot.examples.manual.PredefinedGeneratorParameters.destinationClassName,
+//            classpath,
+//            dependencyClassPath!!,
+//            StringSwitchExample::class.java
+//        )
+        exitProcess(0)
+//        stopConcreteExecutorOnExit = false
+//        val classpath: String = getClassPath(clazz)
+//        val dependencyClassPath: String = getDependencyClassPath()!!
+//        val classUnderTestModel: UtCompositeModel = modelFactory.produceCompositeModel(
+//            classIdForType(clazz)
+//        )
+//        val methodUnderTest = PredefinedGeneratorParameters.getMethodByName(
+//            clazz, funName
+//        )
+//        val models: IdentityHashMap<UtModel, UtModel> = modelFactory.produceAssembleModel(
+//            methodUnderTest,
+//            clazz, listOf(classUnderTestModel)
+//        )
+//        val methodState = EnvironmentModels(
+//            models[classUnderTestModel],
+//            Arrays.asList(UtPrimitiveModel("initial model"), UtPrimitiveModel(-10), UtPrimitiveModel(0)), emptyMap()
+//        )
+//        val methodInfo = TestMethodInfo(
+//            methodUnderTest,
+//            methodState
+//        )
+//        val testSets: List<UtMethodTestSet> = fuzzingTestSets(
+//            listOf(methodInfo),
+//            clazz,
+//            classpath,
+//            dependencyClassPath,
+//            MockStrategyApi.OTHER_PACKAGES,
+//            3000L
+//        )
+//        exitProcess(0)
+//        val utTestCases1: List<UtTestCase> = fuzzingTestCases(
+//            listOf(
+//                methodInfo
+//            ),
+//            clazz,
+//            classpath,
+//            dependencyClassPath,
+//            MockStrategyApi.OTHER_PACKAGES,
+//            100000L
+//        ) { type: Class<*> ->
+//            if (Int::class.javaPrimitiveType == type || Int::class.java == type) {
+//                return@fuzzingTestCases Arrays.asList<Any>(
+//                    0,
+//                    Int.MIN_VALUE,
+//                    Int.MAX_VALUE
+//                )
+//            }
+//            null
+//        }
+
 //        generate(
 //            listOf(methodInfo),
-//            utTestCases1,
+//            testSets,
 //            PredefinedGeneratorParameters.destinationClassName,
 //            classpath,
 //            dependencyClassPath,
@@ -100,9 +164,16 @@ class FuzzerExecutor {
         return clazz.protectionDomain.codeSource.location.path
     }
 
-    private fun getDependencyClassPath(): String {
-        return Arrays.stream((Thread.currentThread().contextClassLoader as URLClassLoader).urLs).map { url: URL ->
-            return@map File(url.toURI()).toString()
+    private fun getDependencyClassPath(): String? {
+        val contextClassLoader = Thread.currentThread().contextClassLoader
+        val urls = getUrlsFromClassLoader(contextClassLoader)
+        return Arrays.stream(urls).map { url: URL ->
+            try {
+                return@map File(url.toURI()).toString()
+            } catch (e: URISyntaxException) {
+                Assertions.fail<Any>(e)
+            }
+            throw RuntimeException()
         }.collect(Collectors.joining(File.pathSeparator))
     }
 }

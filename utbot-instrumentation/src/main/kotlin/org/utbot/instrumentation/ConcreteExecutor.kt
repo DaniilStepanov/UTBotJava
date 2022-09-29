@@ -255,7 +255,6 @@ class ConcreteExecutor<TIResult, TInstrumentation : Instrumentation<TIResult>> p
                 val argumentsByteArray = kryoHelper.writeObject(arguments.asList())
                 val parametersByteArray = kryoHelper.writeObject(parameters)
                 val params = InvokeMethodCommandParams(clazz.name, signature, argumentsByteArray, parametersByteArray)
-
                 val ba = protocolModel.invokeMethodCommand.startSuspending(lifetime, params).result
                 kryoHelper.readObject(ba)
             }

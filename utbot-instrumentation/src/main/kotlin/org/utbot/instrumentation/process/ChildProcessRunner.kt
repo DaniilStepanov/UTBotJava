@@ -62,6 +62,9 @@ class ChildProcessRunner {
             .directory(directory)
 
         return processBuilder.start().also {
+            if (it.getPid == -1L) {
+                it.destroyForcibly()
+            }
             logger.debug { "Process started with PID=${it.getPid}" }
 
             if (UtSettings.logConcreteExecutionErrors) {
