@@ -8,6 +8,7 @@ import org.utbot.engine.greyboxfuzzer.mutator.Seed
 import org.utbot.engine.greyboxfuzzer.mutator.SeedCollector
 import org.utbot.engine.greyboxfuzzer.util.CoverageCollector
 import org.utbot.engine.greyboxfuzzer.util.ZestUtils
+import org.utbot.engine.greyboxfuzzer.util.constructModelFromValues
 import org.utbot.engine.greyboxfuzzer.util.getAllDeclaredFields
 import org.utbot.engine.isStatic
 import org.utbot.engine.javaMethod
@@ -30,6 +31,7 @@ import kotlin.reflect.KClass
 import kotlin.reflect.KFunction
 import kotlin.reflect.jvm.javaMethod
 import kotlin.reflect.jvm.jvmName
+import kotlin.system.exitProcess
 
 class GreyBoxFuzzer(
     private val concreteExecutor: ConcreteExecutor<UtConcreteExecutionResult, UtExecutionInstrumentation>,
@@ -76,90 +78,9 @@ class GreyBoxFuzzer(
             methodUnderTest,
             currentCoverageByLines
         )
+        println("SEEDS AFTER EXPLORATION STAGE = ${seeds.seedsSize()}")
         exploitationStage(exploitationStageIterations, clazz.java, methodLines, currentCoverageByLines)
-        println("SEEDS AFTER EXPLORATION STAGE = $seeds")
         return sequenceOf()
-//
-//
-//        repeat(repeatTimes) {
-//            println("EXECUTION NUMBER $it")
-//            if (thisInstance != null && it != 0) {
-//                InstancesGenerator.regenerateFields(clazz.java, thisInstance!!, classFieldsUsedByFunc.toList())
-//                ZestUtils.setUnserializableFieldsToNull(thisInstance!!)
-//            }
-//            val generatedParameters =
-//                method.parameters.mapIndexed { index, parameter ->
-//                    DataGenerator.generate(
-//                        parameter,
-//                        index,
-//                        DataGeneratorSettings.sourceOfRandomness,
-//                        DataGeneratorSettings.genStatus
-//                    ) to classIdForType(parameter.type)
-//                }
-//            val m = IdentityHashMap<Any, UtModel>()
-//            val modelConstructor = UtModelConstructor(m)
-//            val generatedParameterAsUtModel = generatedParameters.map {
-//                if (it.first == null) {
-//                    UtNullModel(it.second)
-//                } else {
-//                    try {
-//                        ZestUtils.setUnserializableFieldsToNull(it.first!!.value)
-//                        modelConstructor.construct(it.first!!.value, it.second)
-//                    } catch (e: Throwable) {
-//                        UtNullModel(it.second)
-//                    }
-//                }
-//            }.toMutableList()
-//            println(generatedParameterAsUtModel)
-//            //TODO regenerate fiels of thisInstance
-////            if (it != 0 && Random().nextBoolean() && thisInstance != null) {
-////                //InstancesGenerator.regenerateRandomFields(clazz.java, thisInstance)
-////            }
-//            var thisInstanceAsUtModel = createUtModelFromThis(thisInstance, clazz.java, modelConstructor)
-//            val initialEnvironmentModels =
-//                EnvironmentModels(thisInstanceAsUtModel, generatedParameterAsUtModel, mapOf())
-//            println("EXECUTING FUNCTION ${method.name}")
-//            try {
-//                val executor =
-//                    ConcreteExecutor(
-//                        UtExecutionInstrumentation,
-//                        concreteExecutor.pathsToUserClasses,
-//                        concreteExecutor.pathsToDependencyClasses
-//                    ).apply { this.classLoader = utContext.classLoader }
-//                val executionResult =
-//                    executor.executeConcretely(methodUnderTest, initialEnvironmentModels, listOf())
-//                println("EXEC RES = ${executionResult.result}")
-//                exitProcess(0)
-//                val coveredLines = executionResult.coverage.coveredInstructions.map { it.lineNumber }.toSet()
-//                println("EXECUTOR = ${executor.instrumentation}")
-//                executionResult.coverage.coveredInstructions.forEach { CoverageCollector.coverage.add(it) }
-//                val coveredMethodInstructions = CoverageCollector.coverage
-//                    .filter { it.methodSignature == method.signature }
-//                    .map { it.lineNumber }
-//                    .toSet()
-//                if (coveredMethodInstructions.size == methodLines.size) {
-//                    println("I'M DONE WITH ${methodUnderTest.displayName}")
-//                    return sequenceOf()
-//                }
-////                println("COVERAGE = ${coveredLines.size} $coveredLines")
-////                println("COVERED LINES ${coveredLines.size} from $numberOfLinesInMethod ${coveredLines.size / numberOfLinesInMethod.toDouble() * 100.0}")
-//                if (coveredLines.size > maxCoverage) {
-//                    maxCoverage = coveredLines.size
-//                }
-//            } catch (e: Error) {
-//                println("Error :(")
-//            } catch (e: Exception) {
-//                //thisInstance = InstancesGenerator.generateInstanceWithUnsafe(clazz.java, 0, true)
-////                if (e is WritingToKryoException && thisInstance != null) {
-////                    tryToRepairThisInstance(thisInstance, generatedParameterAsUtModel, clazz)
-////                }
-//                println("Exception in ${methodUnderTest.displayName} :( $e")
-//                exitProcess(0)
-//            }
-//            println("--------------------------------")
-//        }
-//        println("MAX COVERAGE = $maxCoverage")
-//        return sequenceOf()
     }
 
 
@@ -254,24 +175,34 @@ class GreyBoxFuzzer(
                     randomSeedArguments.size == 1 -> 0
                     else -> Random.nextInt(0, randomSeedArguments.size)
                 }
-            val randomArgument = randomSeedArguments[randomParameterIndex] ?: return@repeat
+            val randomArgument = randomSeedArguments[randomParameterIndex]
+            println("BEFORE = ${randomArgument.first!!.utModel}")
             val fRandomArgument = randomArgument.first!!
-//            val parameterAsUtModel =
-//                constructModelsFromValues(listOf(randomArgument), modelConstructor).firstOrNull() as? UtReferenceModel
-//                    ?: return@repeat
-//            val mutatedArgument =
-//                Mutator.mutateParameter(fRandomArgument.parameter, parameterAsUtModel, modelConstructor)
-//            val randomSeedArgumentsAsUtModels =
-//                constructModelsFromValues(randomSeedArguments, modelConstructor).toMutableList()
-//            randomSeedArgumentsAsUtModels[randomParameterIndex] = mutatedArgument
-//            val thisInstanceAsUtModel = createUtModelFromThis(thisInstance, clazz, modelConstructor)
-//            val stateBefore =
-//                EnvironmentModels(thisInstanceAsUtModel, randomSeedArgumentsAsUtModels, mapOf())
-//            val executionResult = execute(stateBefore, methodUnderTest)
-//            val seedScore =
-//                handleCoverage(executionResult!!, methodUnderTest.javaMethod!!, prevMethodCoverage, methodLinesToCover)
-//            //seeds.addSeed(Seed(thisInstance, generatedParameters, seedScore.toDouble()))
-//            println("Execution result: ${executionResult.result}")
+            val randomSeedArgumentsAsUtModels =
+                modelConstructor.constructModelFromValues(randomSeedArguments).toMutableList()
+            val initialInstanceForMutation =
+                randomSeedArguments[randomParameterIndex].first?.utModel as? UtReferenceModel ?: return@repeat
+            val mutatedArgument =
+                Mutator.mutateParameter(
+                    fRandomArgument,
+                    initialInstanceForMutation,
+                    modelConstructor
+                )
+//            randomSeedArguments[randomParameterIndex] = fRandomArgument to randomArgument.second
+            println("AFTER = ${mutatedArgument!!.utModel}")
+            if (mutatedArgument?.utModel == null) return@repeat
+            randomSeedArgumentsAsUtModels[randomParameterIndex] = mutatedArgument.utModel
+            val thisInstanceAsUtModel = createUtModelFromThis(thisInstance, clazz, modelConstructor)
+            val stateBefore =
+                EnvironmentModels(thisInstanceAsUtModel, randomSeedArgumentsAsUtModels, mapOf())
+            //println(stateBefore)
+            val executionResult = execute(stateBefore, methodUnderTest)
+            val seedScore =
+                handleCoverage(executionResult!!, methodUnderTest.javaMethod!!, prevMethodCoverage, methodLinesToCover)
+            //seeds.addSeed(Seed(thisInstance, generatedParameters, seedScore.toDouble()))
+            println("MUTATED SEED SCORE = $seedScore")
+            println("Execution result: ${executionResult.result}")
+            println("-----------------------------------------")
         }
     }
 

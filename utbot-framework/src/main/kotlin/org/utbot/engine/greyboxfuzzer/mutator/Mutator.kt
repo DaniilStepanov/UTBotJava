@@ -10,6 +10,7 @@ import org.utbot.external.api.classIdForType
 import org.utbot.framework.concrete.UtModelConstructor
 import org.utbot.framework.plugin.api.UtAssembleModel
 import org.utbot.framework.plugin.api.UtExecutableCallModel
+import org.utbot.framework.plugin.api.UtNullModel
 import org.utbot.framework.plugin.api.UtReferenceModel
 import org.utbot.framework.plugin.api.util.method
 import java.io.ByteArrayInputStream
@@ -31,39 +32,47 @@ object Mutator {
      * Mean number of contiguous bytes to mutate in each mutation.
      */
     private val MEAN_MUTATION_SIZE = 4.0 // Bytes
-//    fun mutateParameter(
-//        originalParameter: Parameter,
-//        paramAsModel: UtReferenceModel,
-//        modelConstructor: UtModelConstructor
-//    ): UtAssembleModel {
-//        val randomMethod = paramAsModel.classId.allMethods.first { it.name == "addAll" }
-//        val generatedParams =
-//            randomMethod.method.parameters.mapIndexed { index, parameter ->
-//                val resolvedParameterCtx =
-//                    resolveParameterTypeAndBuildParameterContext(originalParameter, parameter, index, randomMethod.method)
-//                DataGenerator.generate(
-//                    resolvedParameterCtx,
-//                    parameter,
-//                    index,
-//                    modelConstructor,
-//                    DataGeneratorSettings.sourceOfRandomness,
-//                    DataGeneratorSettings.genStatus
-//                ) to classIdForType(parameter.type)
-//            }.map {
-//                ZestUtils.setUnserializableFieldsToNull(it.first!!.value)
-//                modelConstructor.construct(it.first!!.value, it.second)
-//            }
-//        val callModel = UtExecutableCallModel(paramAsModel, randomMethod, generatedParams)
-//        val resUtModelId = modelConstructor.computeUnusedIdAndUpdate()
-//        return UtAssembleModel(
-//            resUtModelId,
-//            paramAsModel.classId,
-//            "$resUtModelId",
-//            emptyList(),
-//            listOf(callModel),
-//            initialInstance = paramAsModel
-//        )
-//    }
+    fun mutateParameter(
+        fParameter: FParameter,
+        initialInstance: UtReferenceModel,
+        modelConstructor: UtModelConstructor
+    ): FParameter? {
+//        val paramAsModel = fParameter.utModel as? UtReferenceModel ?: return null
+        val originalParameter = fParameter.parameter
+        val randomMethod = initialInstance.classId.allMethods.first { it.name == "addAll" }//.first { it.name == "addAll" }
+        val generatedParams =
+            randomMethod.method.parameters.mapIndexed { index, parameter ->
+                val resolvedParameterCtx =
+                    resolveParameterTypeAndBuildParameterContext(originalParameter, parameter, index, randomMethod.method)
+                DataGenerator.generate(
+                    resolvedParameterCtx,
+                    parameter,
+                    index,
+                    modelConstructor,
+                    DataGeneratorSettings.sourceOfRandomness,
+                    DataGeneratorSettings.genStatus
+                ) to classIdForType(parameter.type)
+            }.map {
+                if (it.first.value != null) {
+                    ZestUtils.setUnserializableFieldsToNull(it.first.value!!)
+                    modelConstructor.construct(it.first.value, it.second)
+                } else {
+                    UtNullModel(it.second)
+                }
+            }
+        val callModel = UtExecutableCallModel(initialInstance, randomMethod, generatedParams)
+        //val resUtModelId = modelConstructor.computeUnusedIdAndUpdate()
+        val resModel = UtAssembleModel(
+            initialInstance.id,
+            initialInstance.classId,
+            "${initialInstance.id}",
+            emptyList(),
+            listOf(callModel),
+            initialInstance = initialInstance
+        )
+
+        return FParameter(originalParameter, null, resModel, fParameter.generator, fParameter.fields)
+    }
 
     private fun resolveParameterTypeAndBuildParameterContext(
         originalParameter: Parameter,
