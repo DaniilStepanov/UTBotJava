@@ -1,11 +1,13 @@
 package org.utbot.engine.greyboxfuzzer.mutator
 
-import com.pholser.junit.quickcheck.internal.ParameterTypeContext
 import com.pholser.junit.quickcheck.random.SourceOfRandomness
 import edu.berkeley.cs.jqf.fuzz.ei.ZestGuidance
-import org.utbot.engine.greyboxfuzzer.generator.*
+import org.utbot.engine.greyboxfuzzer.generator.DataGenerator
+import org.utbot.engine.greyboxfuzzer.generator.DataGeneratorSettings
+import org.utbot.engine.greyboxfuzzer.generator.FParameter
 import org.utbot.engine.greyboxfuzzer.util.ZestUtils
-import org.utbot.engine.greyboxfuzzer.util.toClass
+import org.utbot.engine.greyboxfuzzer.util.getTrue
+import org.utbot.engine.greyboxfuzzer.util.resolveParameterTypeAndBuildParameterContext
 import org.utbot.external.api.classIdForType
 import org.utbot.framework.concrete.UtModelConstructor
 import org.utbot.framework.plugin.api.UtAssembleModel
@@ -17,8 +19,7 @@ import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.ObjectInputStream
 import java.io.ObjectOutputStream
-import java.lang.reflect.Method
-import java.lang.reflect.Parameter
+import kotlin.random.Random
 import java.util.*
 
 object Mutator {
@@ -32,18 +33,31 @@ object Mutator {
      * Mean number of contiguous bytes to mutate in each mutation.
      */
     private val MEAN_MUTATION_SIZE = 4.0 // Bytes
+
+    private fun regenerateRandomParameter(fParameter: FParameter): FParameter? {
+        println(fParameter)
+        return fParameter
+    }
     fun mutateParameter(
         fParameter: FParameter,
         initialInstance: UtReferenceModel,
         modelConstructor: UtModelConstructor
     ): FParameter? {
-//        val paramAsModel = fParameter.utModel as? UtReferenceModel ?: return null
         val originalParameter = fParameter.parameter
-        val randomMethod = initialInstance.classId.allMethods.first { it.name == "addAll" }//.first { it.name == "addAll" }
+        if (Random.getTrue(100)) {
+            return regenerateRandomParameter(fParameter)
+        }
+//        val randomMethod = initialInstance.classId.allMethods
+//            .filter { !it.name.startsWith("get") && !it.name.startsWith("to")}
+//            .filter { it.classId.name != "java.lang.Object" }
+//            .filter { it.parameters.all { !it.name.startsWith("java.util.function") } }
+//            .toList()
+//            .randomOrNull() ?: return null
+        val randomMethod = initialInstance.classId.allMethods.first { it.name == "set" }//.first { it.name == "addAll" }
         val generatedParams =
             randomMethod.method.parameters.mapIndexed { index, parameter ->
                 val resolvedParameterCtx =
-                    resolveParameterTypeAndBuildParameterContext(originalParameter, parameter, index, randomMethod.method)
+                    originalParameter.resolveParameterTypeAndBuildParameterContext(index, randomMethod.method)
                 DataGenerator.generate(
                     resolvedParameterCtx,
                     parameter,
@@ -74,19 +88,6 @@ object Mutator {
         return FParameter(originalParameter, null, resModel, fParameter.generator, fParameter.fields)
     }
 
-    private fun resolveParameterTypeAndBuildParameterContext(
-        originalParameter: Parameter,
-        parameter: Parameter,
-        parameterIndex: Int,
-        method: Method
-    ): ParameterTypeContext {
-        val parameterTypeContext = originalParameter.createParameterTypeContext(0)
-        val resolvedOriginalType = parameterTypeContext.getGenericContext().resolveType(parameterTypeContext.type())
-        val genericContext = createGenericsContext(resolvedOriginalType, originalParameter.type.toClass()!!)
-        val resolvedParameterType = genericContext.method(method).resolveParameterType(parameterIndex)
-        val newGenericContext = createGenericsContext(resolvedParameterType, resolvedParameterType.toClass()!!)
-        return createParameterContextForParameter(parameter, parameterIndex, newGenericContext, resolvedParameterType)
-    }
 
     private fun mutateInput(oldData: Any, sourceOfRandomness: SourceOfRandomness): Any {
         val castedData = oldData as LongArray
@@ -100,7 +101,7 @@ object Mutator {
         oos.writeObject(oldData);
         oos.flush();
         val data = bos.toByteArray()
-        val random = Random()//sourceOfRandomness.toJDKRandom()
+        val random = java.util.Random()//sourceOfRandomness.toJDKRandom()
 
         // Stack a bunch of mutations
         val numMutations = 3//ZestGuidance.Input.sampleGeometric(random, MEAN_MUTATION_COUNT)

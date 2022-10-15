@@ -11,8 +11,8 @@ import org.utbot.engine.greyboxfuzzer.util.toClass
 class UTGeneratorRepository(random: SourceOfRandomness) : GeneratorRepository(random) {
 
     override fun generatorFor(parameter: ParameterTypeContext): Generator<*>? {
-        println("TRYING TO GET GENERATOR FOR ${parameter.type()}")
-        if (parameter.type()?.toClass()?.name == "com.pholser.junit.quickcheck.internal.Zilch") return null
+        println("TRYING TO GET GENERATOR FOR ${parameter.getResolvedType()}")
+        if (parameter.getResolvedType().name == "com.pholser.junit.quickcheck.internal.Zilch") return null
         val generator = super.generatorFor(parameter)
         if (generator is MarkerInterfaceGenerator<*>) {
             throw IllegalArgumentException(

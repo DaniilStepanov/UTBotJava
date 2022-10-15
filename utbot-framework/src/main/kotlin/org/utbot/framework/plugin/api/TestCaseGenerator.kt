@@ -154,8 +154,8 @@ open class TestCaseGenerator(
         runIgnoringCancellationException {
             runBlockingWithCancellationPredicate(isCanceled) {
                 for ((method, controller) in method2controller) {
-                    //TODO RENAME
-                    //if (!method.displayName.contains("putAll")) continue
+                    //TODO REMOVE
+                    //if (!method.displayName.contains("remove")) continue
                     controller.job = launch(currentUtContext) {
                         if (!isActive) return@launch
 

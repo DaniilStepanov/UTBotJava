@@ -69,6 +69,7 @@ import org.utbot.framework.plugin.api.util.utContext
 import org.utbot.framework.plugin.api.util.description
 import org.utbot.fuzzer.*
 import org.utbot.instrumentation.ConcreteExecutor
+import ru.vyarus.java.generics.resolver.context.GenericsInfoFactory
 import soot.jimple.Stmt
 import java.lang.reflect.Method
 import kotlin.system.measureTimeMillis
@@ -482,6 +483,7 @@ class UtBotSymbolicEngine(
 
     //Simple fuzzing
     fun fuzzing(until: Long = Long.MAX_VALUE, modelProvider: (ModelProvider) -> ModelProvider = { it }) = flow<UtResult> {
+        GenericsInfoFactory.disableCache()
         val executableId = if (methodUnderTest.isConstructor) {
             methodUnderTest.javaConstructor!!.executableId
         } else {
@@ -528,7 +530,7 @@ class UtBotSymbolicEngine(
             if (!methodUnderTest.isStatic) {
                 //thisInstance
                 //InstancesGenerator.generateInstanceWithDefaultConstructorOrUnsafe(clazz)
-                InstancesGenerator.generateInstanceWithUnsafe(clazz, 0, true) ?: thisInstance
+                InstancesGenerator.generateInstanceWithUnsafe(clazz, 0, true, null) ?: thisInstance
             } else {
                 null
             }

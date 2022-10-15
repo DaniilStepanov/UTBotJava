@@ -2,14 +2,13 @@ package org.utbot.engine.greyboxfuzzer
 
 import org.utbot.engine.displayName
 import org.utbot.engine.executeConcretely
-import org.utbot.engine.greyboxfuzzer.generator.*
+import org.utbot.engine.greyboxfuzzer.generator.DataGenerator
+import org.utbot.engine.greyboxfuzzer.generator.DataGeneratorSettings
+import org.utbot.engine.greyboxfuzzer.generator.InstancesGenerator
 import org.utbot.engine.greyboxfuzzer.mutator.Mutator
 import org.utbot.engine.greyboxfuzzer.mutator.Seed
 import org.utbot.engine.greyboxfuzzer.mutator.SeedCollector
-import org.utbot.engine.greyboxfuzzer.util.CoverageCollector
-import org.utbot.engine.greyboxfuzzer.util.ZestUtils
-import org.utbot.engine.greyboxfuzzer.util.constructModelFromValues
-import org.utbot.engine.greyboxfuzzer.util.getAllDeclaredFields
+import org.utbot.engine.greyboxfuzzer.util.*
 import org.utbot.engine.isStatic
 import org.utbot.engine.javaMethod
 import org.utbot.external.api.classIdForType
@@ -20,7 +19,7 @@ import org.utbot.framework.plugin.api.*
 import org.utbot.framework.plugin.api.util.signature
 import org.utbot.framework.plugin.api.util.utContext
 import org.utbot.instrumentation.ConcreteExecutor
-import soot.Scene
+import ru.vyarus.java.generics.resolver.context.GenericsInfoFactory
 import soot.jimple.internal.JAssignStmt
 import soot.jimple.internal.JInstanceFieldRef
 import java.lang.reflect.Field
@@ -30,8 +29,6 @@ import kotlin.random.Random
 import kotlin.reflect.KClass
 import kotlin.reflect.KFunction
 import kotlin.reflect.jvm.javaMethod
-import kotlin.reflect.jvm.jvmName
-import kotlin.system.exitProcess
 
 class GreyBoxFuzzer(
     private val concreteExecutor: ConcreteExecutor<UtConcreteExecutionResult, UtExecutionInstrumentation>,
@@ -40,21 +37,18 @@ class GreyBoxFuzzer(
     private var thisInstance: Any?,
 ) {
 
-    val seeds = SeedCollector()
+    private val seeds = SeedCollector()
     val kfunction = methodUnderTest.callable as KFunction<*>
-    val explorationStageIterations = 1000
+    private val explorationStageIterations = 100
     val exploitationStageIterations = 1000
 
     suspend fun fuzz(): Sequence<List<UtModel>> {
         println("STARTED TO FUZZ ${kfunction.name}")
         val method = kfunction.javaMethod!!
+//        FieldInformationCollector().collectInfo(methodUnderTest)
+//        exitProcess(0)
         val clazz = methodUnderTest.clazz
-        val cl = Scene.v().classes.find { it.name == methodUnderTest.clazz.jvmName }!!
-        val sootMethod =
-            cl.methods.find {
-                val sig = it.bytecodeSignature.drop(1).dropLast(1).substringAfter("${clazz.jvmName}: ")
-                kfunction.javaMethod!!.signature == sig
-            }
+        val sootMethod = method.toSootMethod()
         val classFieldsUsedByFunc =
             sootMethod!!.activeBody.units
                 .asSequence()
@@ -65,7 +59,7 @@ class GreyBoxFuzzer(
                 .toSet()
         val methodLines = sootMethod.activeBody.units.map { it.javaSourceStartLineNumber }.filter { it != -1 }.toSet()
         var maxCoverage = 0
-        val repeatTimes = 1000
+        val repeatTimes = 100
         val currentCoverageByLines = CoverageCollector.coverage
             .filter { it.methodSignature == method.signature }
             .map { it.lineNumber }
@@ -78,8 +72,8 @@ class GreyBoxFuzzer(
             methodUnderTest,
             currentCoverageByLines
         )
-        println("SEEDS AFTER EXPLORATION STAGE = ${seeds.seedsSize()}")
-        exploitationStage(exploitationStageIterations, clazz.java, methodLines, currentCoverageByLines)
+        //println("SEEDS AFTER EXPLORATION STAGE = ${seeds.seedsSize()}")
+        //exploitationStage(exploitationStageIterations, clazz.java, methodLines, currentCoverageByLines)
         return sequenceOf()
     }
 
@@ -120,6 +114,7 @@ class GreyBoxFuzzer(
                 InstancesGenerator.regenerateFields(clazz, thisInstance!!, classFieldsUsedByFunc.toList())
                 ZestUtils.setUnserializableFieldsToNull(thisInstance!!)
             }
+            method.parameters.map { it.replaceUnresolvedGenericsToRandomTypes() }
             val generatedParameters =
                 method.parameters.mapIndexed { index, parameter ->
                     DataGenerator.generate(
@@ -130,15 +125,25 @@ class GreyBoxFuzzer(
                         DataGeneratorSettings.genStatus
                     ) to classIdForType(parameter.type)
                 }
+            println(generatedParameters)
             //val generatedParametersAsUtModels = constructModelsFromValues(generatedParameters, modelConstructor)
             val thisInstanceAsUtModel = createUtModelFromThis(thisInstance, clazz, modelConstructor)
             val stateBefore =
                 EnvironmentModels(thisInstanceAsUtModel, generatedParameters.map { it.first.utModel }, mapOf())
-            val executionResult = execute(stateBefore, methodUnderTest)
-            val seedScore =
-                handleCoverage(executionResult!!, methodUnderTest.javaMethod!!, prevMethodCoverage, methodLinesToCover)
-            seeds.addSeed(Seed(thisInstance, generatedParameters, seedScore.toDouble()))
-            println("Execution result: ${executionResult.result}")
+            try {
+                val executionResult = execute(stateBefore, methodUnderTest)
+                val seedScore =
+                    handleCoverage(
+                        executionResult!!,
+                        methodUnderTest.javaMethod!!,
+                        prevMethodCoverage,
+                        methodLinesToCover
+                    )
+                seeds.addSeed(Seed(thisInstance, generatedParameters, seedScore.toDouble()))
+                println("Execution result: ${executionResult.result}")
+            } catch (e: Throwable) {
+                return@repeat
+            }
         }
     }
 
@@ -196,13 +201,17 @@ class GreyBoxFuzzer(
             val stateBefore =
                 EnvironmentModels(thisInstanceAsUtModel, randomSeedArgumentsAsUtModels, mapOf())
             //println(stateBefore)
-            val executionResult = execute(stateBefore, methodUnderTest)
-            val seedScore =
-                handleCoverage(executionResult!!, methodUnderTest.javaMethod!!, prevMethodCoverage, methodLinesToCover)
-            //seeds.addSeed(Seed(thisInstance, generatedParameters, seedScore.toDouble()))
-            println("MUTATED SEED SCORE = $seedScore")
-            println("Execution result: ${executionResult.result}")
-            println("-----------------------------------------")
+            try {
+                val executionResult = execute(stateBefore, methodUnderTest)
+                val seedScore =
+                    handleCoverage(executionResult!!, methodUnderTest.javaMethod!!, prevMethodCoverage, methodLinesToCover)
+                //seeds.addSeed(Seed(thisInstance, generatedParameters, seedScore.toDouble()))
+                println("MUTATED SEED SCORE = $seedScore")
+                println("Execution result1: ${executionResult.result}")
+                println("-----------------------------------------")
+            } catch (e: Throwable) {
+                return@repeat
+            }
         }
     }
 

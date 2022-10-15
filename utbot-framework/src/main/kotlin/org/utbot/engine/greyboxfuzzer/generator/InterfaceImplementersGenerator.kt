@@ -26,7 +26,7 @@ object InterfaceImplementersGenerator {
             val randomMethod = staticGenerators.chooseRandomMethodToGenerateInstance()
             println("TRYING TO GENERATE class using $randomMethod")
             if (randomMethod != null) {
-                //InstancesGenerator.generateInterfaceInstanceViaStaticCall(randomMethod, depth)?.let { return it }
+                InstancesGenerator.generateInterfaceInstanceViaStaticCall(randomMethod, parameterTypeContext, depth)?.let { return it }
             }
         }
         val sootClass = Scene.v().classes.find { it.name == parameterTypeContext.rawClass.name } ?: return null
@@ -94,7 +94,7 @@ object InterfaceImplementersGenerator {
             if (isRecursiveUnsafe) mutableListOf('u')
             else mutableListOf('c', 'c', 's', 'u')
         while (true) {
-            val randomTypeOfGeneration = typeOfGenerations.randomOrNull() ?: return null
+            val randomTypeOfGeneration = typeOfGenerations.randomOrNull() ?: break
             println("TYPE OF GENERATION $randomTypeOfGeneration")
             val generatedInstance =
                 when (randomTypeOfGeneration) {
@@ -106,13 +106,21 @@ object InterfaceImplementersGenerator {
                         depth
                     )
                     else -> if (isRecursiveUnsafe) {
-                        InstancesGenerator.generateInstanceWithUnsafe(prevImplementer, depth, true)
+                        InstancesGenerator.generateInstanceWithUnsafe(prevImplementer, depth, true, genericsContext)
                     } else {
-                        InstancesGenerator.generateInstanceWithUnsafe(prevImplementer, depth, false)
+                        InstancesGenerator.generateInstanceWithUnsafe(prevImplementer, depth, false, genericsContext)
                     }
                 }
             generatedInstance?.let { return it } ?: typeOfGenerations.removeIf { it == randomTypeOfGeneration }
         }
+        if (staticGenerators.isNotEmpty()) {
+            val randomMethod = staticGenerators.chooseRandomMethodToGenerateInstance()
+            println("TRYING TO GENERATE class using $randomMethod")
+            if (randomMethod != null) {
+                InstancesGenerator.generateInterfaceInstanceViaStaticCall(randomMethod, parameterTypeContext, depth)?.let { return it }
+            }
+        }
+        return null
     }
 
 }

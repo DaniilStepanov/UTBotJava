@@ -66,7 +66,7 @@ class UserClassesGenerator : ComponentizedGenerator<Any>(Any::class.java) {
         println("TRYING TO GENERATE $parameterType depth: $depth")
         //TODO! generate inner classes instances
         //if (TypeUtils.getOuter(resolvedJavaType) != null) return null
-        if (parameterType.toString().contains("$")) return null
+        if (parameterType.toString().substringBefore('<').contains("$") && !clazz!!.hasModifiers(Modifier.STATIC)) return null
         if (parameterType.componentClass.name == "java.lang.Object") {
             return DataGeneratorSettings.generatorRepository
                 .getGenerators()
@@ -79,18 +79,6 @@ class UserClassesGenerator : ComponentizedGenerator<Any>(Any::class.java) {
         if (parameterType.componentClass.name == "java.lang.Class") return generateClass()
         else if (parameterType.componentClass.name == "java.lang.reflect.Type") return generateType()
         val modifiers = parameterType.componentClass.modifiers
-        val parameterizedTypeImpl = parameterTypeContext!!.type() as? ParameterizedTypeImpl
-
-        if (parameterizedTypeImpl != null && parameterizedTypeImpl.actualTypeArguments.any { it is WildcardTypeImpl }) {
-            for ((ind, typeArg) in parameterizedTypeImpl.actualTypeArguments.withIndex()) {
-                if (typeArg is WildcardTypeImpl) {
-                    val oldUpperBounds = WildcardTypeImpl::class.java.getDeclaredField("upperBounds")
-                    oldUpperBounds.isAccessible = true
-                    val newBounds = parameterizedTypeImpl.rawType.typeParameters[ind].bounds
-                    oldUpperBounds.set(typeArg, newBounds)
-                }
-            }
-        }
         val resolvedJavaType = parameterTypeContext!!.getGenericContext().resolveType(parameterTypeContext!!.type())
         val gctx = createGenericsContext(resolvedJavaType, clazz!!)
         if (modifiers.and(Modifier.ABSTRACT) > 0 || modifiers.and(Modifier.INTERFACE) > 0) {
@@ -122,7 +110,7 @@ class UserClassesGenerator : ComponentizedGenerator<Any>(Any::class.java) {
                         if (staticGenerators.isNotEmpty()) {
                             val randomMethod = staticGenerators.chooseRandomMethodToGenerateInstance()
                             if (randomMethod != null) {
-                                InstancesGenerator.generateInterfaceInstanceViaStaticCall(randomMethod, depth)
+                                InstancesGenerator.generateInterfaceInstanceViaStaticCall(randomMethod, parameterTypeContext!!, depth)
                             } else {
                                 null
                             }
@@ -133,7 +121,8 @@ class UserClassesGenerator : ComponentizedGenerator<Any>(Any::class.java) {
                     else -> InstancesGenerator.generateInstanceWithUnsafe(
                         resolvedJavaType.toClass()!!,
                         depth,
-                        generationMethod == GenerationMethod.UNSAFE
+                        generationMethod == GenerationMethod.UNSAFE,
+                        gctx
                     )
                 }
             generatedInstance?.let { return it } ?: typeOfGenerations.removeIf { it == randomTypeOfGeneration }

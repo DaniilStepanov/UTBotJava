@@ -1,18 +1,17 @@
 @file:Suppress("JAVA_MODULE_DOES_NOT_EXPORT_PACKAGE")
+
 package org.utbot.engine.greyboxfuzzer.util
 
+import org.javaruntype.type.Types
 import org.utbot.engine.greyboxfuzzer.generator.UserClassesGenerator
+import org.utbot.engine.rawType
 import org.utbot.framework.codegen.model.constructor.tree.isStatic
 import sun.reflect.generics.reflectiveObjects.GenericArrayTypeImpl
 import sun.reflect.generics.reflectiveObjects.ParameterizedTypeImpl
-import java.lang.reflect.Constructor
+import sun.reflect.generics.reflectiveObjects.TypeVariableImpl
+import java.lang.reflect.*
 import java.lang.reflect.Array as RArray
-import java.lang.reflect.Field
-import java.lang.reflect.Method
-import java.lang.reflect.Modifier
-import java.lang.reflect.Type
 import kotlin.random.Random
-import kotlin.system.exitProcess
 
 fun Class<*>.getAllDeclaredFields(): List<Field> {
     val res = mutableListOf<Field>()
@@ -91,23 +90,27 @@ fun Class<*>.getAllSuperClassesAndInterfaces(): List<Class<*>> {
 }
 
 fun Field.getFieldValue(instance: Any?): Any? {
-    val oldAccessibleFlag = this.isAccessible
-    this.isAccessible = true
-    val fixedInstance =
-        if (this.isStatic) {
-            null
-        } else instance
-    return when (this.type) {
-        Boolean::class.javaPrimitiveType -> this.getBoolean(fixedInstance)
-        Byte::class.javaPrimitiveType -> this.getByte(fixedInstance)
-        Char::class.javaPrimitiveType -> this.getChar(fixedInstance)
-        Short::class.javaPrimitiveType -> this.getShort(fixedInstance)
-        Int::class.javaPrimitiveType -> this.getInt(fixedInstance)
-        Long::class.javaPrimitiveType -> this.getLong(fixedInstance)
-        Float::class.javaPrimitiveType -> this.getFloat(fixedInstance)
-        Double::class.javaPrimitiveType -> this.getDouble(fixedInstance)
-        else -> this.get(fixedInstance)
-    }.also { this.isAccessible = oldAccessibleFlag }
+    try {
+        val oldAccessibleFlag = this.isAccessible
+        this.isAccessible = true
+        val fixedInstance =
+            if (this.isStatic) {
+                null
+            } else instance
+        return when (this.type) {
+            Boolean::class.javaPrimitiveType -> this.getBoolean(fixedInstance)
+            Byte::class.javaPrimitiveType -> this.getByte(fixedInstance)
+            Char::class.javaPrimitiveType -> this.getChar(fixedInstance)
+            Short::class.javaPrimitiveType -> this.getShort(fixedInstance)
+            Int::class.javaPrimitiveType -> this.getInt(fixedInstance)
+            Long::class.javaPrimitiveType -> this.getLong(fixedInstance)
+            Float::class.javaPrimitiveType -> this.getFloat(fixedInstance)
+            Double::class.javaPrimitiveType -> this.getDouble(fixedInstance)
+            else -> this.get(fixedInstance)
+        }.also { this.isAccessible = oldAccessibleFlag }
+    } catch (e: Throwable) {
+        return null
+    }
 }
 
 fun Field.setFieldValue(instance: Any?, fieldValue: Any?) {
@@ -168,8 +171,16 @@ fun Type.toClass(): Class<*>? =
         when (this) {
             is ParameterizedTypeImpl -> this.rawType
             is ru.vyarus.java.generics.resolver.context.container.ParameterizedTypeImpl -> this.rawType.toClass()
-            is GenericArrayTypeImpl -> this.genericComponentType.toClass()
-            else -> this as Class<*>
+            is GenericArrayTypeImpl -> java.lang.reflect.Array.newInstance(
+                this.genericComponentType.toClass(),
+                0
+            ).javaClass
+            is ru.vyarus.java.generics.resolver.context.container.GenericArrayTypeImpl -> java.lang.reflect.Array.newInstance(
+                this.genericComponentType.toClass(),
+                0
+            ).javaClass
+            is ru.vyarus.java.generics.resolver.context.container.ExplicitTypeVariable -> this.rawType.toClass()
+            else -> this as? Class<*>
         }
     } catch (e: Exception) {
         null
@@ -254,4 +265,58 @@ fun generateParameterizedTypeImpl(
     val constructor = ParameterizedTypeImpl::class.java.declaredConstructors.first()
     constructor.isAccessible = true
     return constructor.newInstance(clazz, actualTypeParameters, null) as ParameterizedTypeImpl
+}
+
+object ReflectionUtils {
+    fun getRandomClassWithBounds(bound: Class<*>): Class<*> {
+        return Any::class.java
+    }
+
+}
+
+val ParameterizedTypeImpl.actualTypeArgumentsRecursive: List<Type>
+    get() {
+        val queue = ArrayDeque<Type>()
+        val res = mutableListOf<Type>()
+        this.actualTypeArguments.map { queue.add(it) }
+        while (queue.isNotEmpty()) {
+            val el = queue.removeFirst()
+            if (el is ParameterizedTypeImpl) {
+                el.actualTypeArguments.map { queue.add(it) }
+            }
+            res.add(el)
+        }
+        return res
+    }
+
+fun Parameter.replaceUnresolvedGenericsToRandomTypes() {
+    val allUnresolvedTypesInType = (this.parameterizedType as? ParameterizedTypeImpl)
+        ?.actualTypeArgumentsRecursive
+        ?.filter { it is WildcardType || it is TypeVariable<*> }
+        ?: return
+    val allUnresolvedTypesInAnnotatedType = (this.annotatedType.type as? ParameterizedTypeImpl)
+        ?.actualTypeArgumentsRecursive
+        ?.filter { it is WildcardType || it is TypeVariable<*> }
+        ?: return
+    val allUnresolvedTypes = allUnresolvedTypesInType.zip(allUnresolvedTypesInAnnotatedType)
+    for ((unresolvedType, unresolvedTypeCopy) in allUnresolvedTypes) {
+        val upperBound =
+            if (unresolvedType is WildcardType) {
+                unresolvedType.upperBounds.firstOrNull() ?: continue
+            } else if (unresolvedType is TypeVariable<*>) {
+                unresolvedType.bounds?.firstOrNull() ?: continue
+            } else continue
+        val upperBoundAsSootClass = upperBound.toClass()?.toSootClass() ?: continue
+        val randomChild = upperBoundAsSootClass.children.randomOrNull()?.toJavaClass() ?: continue
+        val upperBoundsFields =
+            if (unresolvedType is WildcardType) {
+                unresolvedType.javaClass.getAllDeclaredFields().find { it.name.contains("upperBounds") }!! to
+                        unresolvedTypeCopy.javaClass.getAllDeclaredFields().find { it.name.contains("upperBounds") }!!
+            } else if (unresolvedType is TypeVariable<*>) {
+                unresolvedType.javaClass.getAllDeclaredFields().find { it.name.contains("bounds") }!! to
+                        unresolvedTypeCopy.javaClass.getAllDeclaredFields().find { it.name.contains("bounds") }!!
+            } else continue
+        upperBoundsFields.first.setFieldValue(unresolvedType, arrayOf(randomChild))
+        upperBoundsFields.second.setFieldValue(unresolvedType, arrayOf(randomChild))
+    }
 }

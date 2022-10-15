@@ -1,10 +1,13 @@
 package org.utbot.engine.greyboxfuzzer.util
 
+import org.utbot.framework.plugin.api.util.signature
 import soot.Hierarchy
+import soot.Scene
 import soot.SootClass
-import soot.util.ArraySet
-import java.util.*
-import kotlin.collections.ArrayDeque
+import soot.SootMethod
+import java.lang.reflect.Method
+import kotlin.reflect.KFunction
+import kotlin.reflect.jvm.javaMethod
 
 fun SootClass.getImplementersOfWithChain(hierarchy: Hierarchy): List<List<SootClass>>? {
     this.checkLevel(SootClass.HIERARCHY)
@@ -46,6 +49,49 @@ fun SootClass.toJavaClass(): Class<*> =
     } catch (e: ClassNotFoundException) {
         CustomClassLoader.classLoader.loadClass(this.name)
     }
+
+fun KFunction<*>.toSootMethod(): SootMethod? = this.javaMethod?.toSootMethod()
+
+fun Class<*>.toSootClass() =
+    Scene.v().classes.find { it.name == this.name }
+fun Method.toSootMethod(): SootMethod? {
+    val javaClass = this.declaringClass
+    val cl = Scene.v().classes.find { it.name == javaClass.name }!!
+    println("CL = $cl")
+    return cl.methods.find {
+        val sig = it.bytecodeSignature.drop(1).dropLast(1).substringAfter("${cl.name}: ")
+        this.signature == sig
+    }
+}
+
+fun SootClass.getAllAncestors(): List<SootClass> {
+    val queue = ArrayDeque<SootClass>()
+    val res = mutableSetOf<SootClass>()
+    this.superclassOrNull?.let { queue.add(it) }
+    queue.addAll(this.interfaces)
+    while (queue.isNotEmpty()) {
+        val el = queue.removeFirst()
+        el.superclassOrNull?.let {
+            if (!res.contains(it) && !queue.contains(it)) queue.add(it)
+        }
+        el.interfaces.map { if (!res.contains(it) && !queue.contains(it)) queue.add(it) }
+        res.add(el)
+    }
+    return res.toList()
+}
+
+val SootClass.children
+    get() =
+        Scene.v().classes.filter { it.getAllAncestors().contains(this) }
+
+val SootClass.superclassOrNull
+    get() =
+        try {
+            superclass
+        } catch (e: Exception) {
+            null
+        }
+
 
 //fun getImplementersOf(i: SootClass): List<SootClass>? {
 //    i.checkLevel(SootClass.HIERARCHY)

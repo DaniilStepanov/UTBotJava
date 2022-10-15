@@ -8,6 +8,7 @@ import com.pholser.junit.quickcheck.internal.ParameterTypeContext
 import com.pholser.junit.quickcheck.internal.generator.GeneratorRepository
 import org.javaruntype.exceptions.TypeValidationException
 import org.javaruntype.type.Types
+import org.utbot.engine.greyboxfuzzer.util.getAllAncestors
 import org.utbot.engine.greyboxfuzzer.util.getAllDeclaredFields
 import org.utbot.engine.greyboxfuzzer.util.toClass
 import org.utbot.engine.rawType
@@ -15,7 +16,10 @@ import ru.vyarus.java.generics.resolver.GenericsResolver
 import ru.vyarus.java.generics.resolver.context.ConstructorGenericsContext
 import ru.vyarus.java.generics.resolver.context.GenericsContext
 import ru.vyarus.java.generics.resolver.context.GenericsInfo
+import ru.vyarus.java.generics.resolver.context.container.GenericArrayTypeImpl
+import soot.Scene
 import sun.reflect.generics.reflectiveObjects.ParameterizedTypeImpl
+import sun.reflect.generics.reflectiveObjects.WildcardTypeImpl
 import java.lang.reflect.*
 
 
@@ -113,12 +117,21 @@ fun Parameter.createParameterTypeContext(parameterIndex: Int): ParameterTypeCont
 fun GeneratorRepository.getOrProduceGenerator(clazz: Class<*>, depth: Int = 0): Generator<*>? =
     getOrProduceGenerator(ParameterTypeContext.forClass(clazz), depth)
 
+
+fun GeneratorRepository.getOrProduceGenerator(resolvedType: Type, depth: Int = 0): Generator<*>? =
+    resolvedType.buildParameterContext()?.let {
+        getOrProduceGenerator(it, depth)
+    } ?: resolvedType.toClass()?.let {
+        getOrProduceGenerator(it, depth)
+    }
+
+
 fun GeneratorRepository.getOrProduceGenerator(
     parameterTypeContext: ParameterTypeContext,
     depth: Int
 ): Generator<*>? {
     parameterTypeContext.getAllParameterTypeContexts().reversed().forEach { typeContext ->
-        if (typeContext.getResolvedType().toString().contains("$")) return null
+        //if (typeContext.getResolvedType().toString().contains("$")) return null
         try {
             this.produceGenerator(typeContext)
         } catch (e: Exception) {
@@ -179,18 +192,22 @@ private fun ParameterTypeContext.getAllTypeParameters(): List<Type> {
 }
 
 fun ParameterTypeContext.getAllParameterTypeContexts(): List<ParameterTypeContext> {
+    fun ArrayDeque<ParameterTypeContext>.addParameterContext(ctx: ParameterTypeContext) {
+        if (ctx.getResolvedType().name == "com.pholser.junit.quickcheck.internal.Zilch") return
+        add(ctx)
+    }
     val res = mutableListOf(this)
     val queue = ArrayDeque<ParameterTypeContext>()
     if (this.isArray) {
-        this.arrayComponentContext().let { queue.add(it) }
+        this.arrayComponentContext().let { queue.addParameterContext(it) }
     }
-    this.typeParameterContexts(DataGeneratorSettings.sourceOfRandomness).forEach { queue.add(it) }
+    this.typeParameterContexts(DataGeneratorSettings.sourceOfRandomness).forEach { queue.addParameterContext(it) }
     while (queue.isNotEmpty()) {
         val el = queue.removeFirst()
         if (el.isArray) {
-            el.arrayComponentContext().let { queue.add(it) }
+            el.arrayComponentContext().let { queue.addParameterContext(it) }
         }
-        el.typeParameterContexts(DataGeneratorSettings.sourceOfRandomness).forEach { queue.add(it) }
+        el.typeParameterContexts(DataGeneratorSettings.sourceOfRandomness).forEach { queue.addParameterContext(it) }
         res.add(el)
     }
     return res
@@ -296,6 +313,94 @@ fun createParameterContextForParameter(
         generics,
         parameterIndex
     )
+}
+
+fun ParameterizedType.buildParameterContext(): ParameterTypeContext? {
+    println("LOL")
+    return null
+//    val parameterTypeContext = this.createParameterTypeContext(0)
+//    val resolvedOriginalType = parameterTypeContext.getGenericContext().resolveType(parameterTypeContext.type())
+//    val genericContext = createGenericsContext(resolvedOriginalType, this.type.toClass()!!)
+//    val resolvedParameterType = genericContext.method(method).resolveParameterType(parameterIndex)
+//    val newGenericContext = createGenericsContext(resolvedParameterType, resolvedParameterType.toClass()!!)
+//    return createParameterContextForParameter(parameter, parameterIndex, newGenericContext, resolvedParameterType)
+}
+
+
+fun ParameterizedType.buildGenericsContext(): GenericsContext {
+    val clazz = this.toClass()!!
+    val klassTypeParams = clazz.typeParameters?.map { it.name }
+    val gm = LinkedHashMap<String, Type>()
+    klassTypeParams?.zip(this.actualTypeArguments)?.forEach { gm[it.first] = it.second }
+    val m = mutableMapOf(clazz to gm)
+    val genericsInfo = GenericsInfo(clazz, m)
+    return GenericsContext(genericsInfo, clazz)
+}
+
+fun Field.resolveFieldType(originalType: ParameterizedType): Type {
+    return originalType.buildGenericsContext().resolveFieldType(this)
+}
+
+fun Field.resolveFieldType(genericsContext: GenericsContext): Type? =
+    try {
+        genericsContext.resolveFieldType(this)
+    } catch (_: Throwable) {
+        null
+    }
+
+fun Field.buildParameterContext(originalType: ParameterizedType): ParameterTypeContext {
+    val ctx = originalType.buildGenericsContext()
+    return createParameterTypeContext(
+        this.name,
+        this.annotatedType,
+        this.declaringClass.name,
+        Types.forJavaLangReflectType(ctx.resolveFieldType(this)),
+        ctx
+    )
+}
+
+fun Field.buildParameterContext(genericsContext: GenericsContext): ParameterTypeContext {
+    return createParameterTypeContext(
+        this.name,
+        this.annotatedType,
+        this.declaringClass.name,
+        Types.forJavaLangReflectType(genericsContext.resolveFieldType(this)),
+        genericsContext
+    )
+}
+
+//fun Type.buildParameterContext(): ParameterTypeContext {
+//    val genericContext =
+//        if (this is ParameterizedType) {
+//            this.buildGenericsContext()
+//        } else null
+////        } else {
+////            ParameterTypeContext.forClass(this.toClass())
+////        }
+//    this.toClass()
+//    return createParameterTypeContext(
+//        this.name,
+//        this.annotatedType,
+//        this.declaringClass.name,
+//        Types.forJavaLangReflectType(ctx.resolveFieldType(this)),
+//        ctx
+//    )
+//}
+
+@Deprecated("Not implemented")
+fun Type.buildParameterContext(): ParameterTypeContext? {
+    val clazz = this.toClass() ?: return null
+    return if (this is ParameterizedType) {
+        buildParameterContext()
+    } else {
+        createParameterTypeContext(
+            clazz.typeName,
+            FakeAnnotatedTypeFactory.makeFrom(clazz),
+            clazz.typeName,
+            Types.forJavaLangReflectType(this),
+            GenericsResolver.resolve(clazz)
+        )
+    }
 }
 
 //org.javaruntype.type.Type<*>

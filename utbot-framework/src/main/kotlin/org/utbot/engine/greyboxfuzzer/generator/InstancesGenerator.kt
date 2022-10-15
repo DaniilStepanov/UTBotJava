@@ -1,4 +1,5 @@
 @file:Suppress("JAVA_MODULE_DOES_NOT_EXPORT_PACKAGE")
+
 package org.utbot.engine.greyboxfuzzer.generator
 
 import com.pholser.junit.quickcheck.internal.ParameterTypeContext
@@ -8,6 +9,7 @@ import org.utbot.engine.isPublic
 import org.utbot.engine.rawType
 import org.utbot.framework.plugin.api.util.signature
 import ru.vyarus.java.generics.resolver.context.GenericsContext
+import ru.vyarus.java.generics.resolver.context.GenericsInfo
 import ru.vyarus.java.generics.resolver.util.GenericsUtils
 import sun.reflect.annotation.AnnotatedTypeFactory
 import sun.reflect.annotation.TypeAnnotation
@@ -146,38 +148,49 @@ object InstancesGenerator {
         return fieldValue
     }
 
-    fun generateInterfaceInstanceViaStaticCall(method: Method, depth: Int): Any? {
-        val args = method.parameters.withIndex().map { indexedParameter ->
-            println("PARAMETER = ${indexedParameter.value}")
-            println("METHOD = ${method.signature}")
-            val parameterContext =
-                try {
-                    ParameterTypeContext.forParameter(indexedParameter.value)
-                } catch (e: Exception) {
-                    val clazz = indexedParameter.value.type
-                    val parametersBounds =
-                        indexedParameter.value.type.typeParameters.map {
-                            it.bounds.firstOrNull() ?: Any::class.java.rawType
-                        }.toTypedArray()
-                    val p = ru.vyarus.java.generics.resolver.context.container.ParameterizedTypeImpl(
-                        indexedParameter.value.type,
-                        *parametersBounds
-                    )
-                    val genericContext = createGenericsContext(p, clazz)
-                    createParameterContextForParameter(
-                        indexedParameter.value,
-                        indexedParameter.index,
-                        genericContext,
-                        p
-                    )
-                }
-            val generator = DataGeneratorSettings.generatorRepository.getOrProduceGenerator(
-                parameterContext,
-                depth
-            )
-            generator?.generate(DataGeneratorSettings.sourceOfRandomness, DataGeneratorSettings.genStatus)
+    fun generateInterfaceInstanceViaStaticCall(
+        method: Method,
+        parameterTypeContext: ParameterTypeContext,
+        depth: Int
+    ): Any? {
+//        val resolvedType = parameterTypeContext.getResolvedType()
+//        val cl = resolvedType.rawClass
+//        val clazz = method.genericReturnType as ParameterizedType
+//        val resolvedJavaType = parameterTypeContext.getGenericContext().resolveType(parameterTypeContext.type()) as ParameterizedType
+//        val gm = LinkedHashMap<String, Type>()
+//        clazz.actualTypeArguments.toList().zip(resolvedJavaType.actualTypeArguments.toList()).forEach {
+//            gm[it.first.typeName] = it.second
+//        }
+//        val m = mutableMapOf(cl to gm)
+//        val genericsContext = GenericsContext(GenericsInfo(cl, m), cl)
+//        val methodReturnType = method.genericReturnType
+//        genericsContext
+////GenericsResolutionUtils.resolveDirectRawGenerics(method, gm)
+////GenericsUtils.resolveTypeVariables(method.typeParameters.first().bounds[0], gm)
+        val cl = parameterTypeContext.getResolvedType().rawClass
+        val clazz = method.genericReturnType as ParameterizedType
+        val resolvedJavaType =
+            parameterTypeContext.getGenericContext().resolveType(parameterTypeContext.type()) as ParameterizedType
+        val gm = LinkedHashMap<String, Type>()
+        clazz.actualTypeArguments.toList().zip(resolvedJavaType.actualTypeArguments.toList()).forEach {
+            gm[it.first.typeName] = it.second
+        }
+        val m = mutableMapOf(cl to gm)
+        val generics = LinkedHashMap<String, Type>()
+        (method.genericReturnType as? ParameterizedTypeImpl)?.actualTypeArguments?.forEachIndexed { index, typeVariable ->
+            generics[typeVariable.typeName] = (resolvedJavaType as GParameterizedTypeImpl).actualTypeArguments[index]
+        }
+        val gctx = GenericsContext(GenericsInfo(cl, m), cl)
+        gctx.method(method).methodGenericsMap().forEach { (s, type) -> generics.getOrPut(s) { type } }
+        val args = method.parameters.mapIndexed { index, parameter ->
+            val resolvedParameterType = GenericsUtils.resolveTypeVariables(parameter.parameterizedType, generics)
+            createParameterContextForParameter(parameter, index, gctx, resolvedParameterType).let { ptx ->
+                val generator = DataGeneratorSettings.generatorRepository.getOrProduceGenerator(ptx, depth)
+                generator?.generate(DataGeneratorSettings.sourceOfRandomness, DataGeneratorSettings.genStatus)
+            }
         }
         return try {
+            method.isAccessible = true
             method.invoke(null, *args.toTypedArray())
         } catch (e: Exception) {
             null
@@ -372,7 +385,12 @@ object InstancesGenerator {
         }
     }
 
-    fun generateInstanceWithUnsafe(clazz: Class<*>, depth: Int, isRecursiveWithUnsafe: Boolean): Any? {
+    fun generateInstanceWithUnsafe(
+        clazz: Class<*>,
+        depth: Int,
+        isRecursiveWithUnsafe: Boolean,
+        genericsContext: GenericsContext?
+    ): Any? {
         println("TRYING TO GENERATE ${clazz.name} instance")
         if (depth >= DataGeneratorSettings.maxDepthOfGeneration) return null
         val clazzInstance =
@@ -383,9 +401,14 @@ object InstancesGenerator {
             } catch (e: Error) {
                 return null
             }
-        val parameterTypeContext = ParameterTypeContext.forClass(clazz)
-        clazz.getAllDeclaredFields().forEach {
-            setNewFieldValue(it, parameterTypeContext, clazzInstance, depth, isRecursiveWithUnsafe)
+        clazz.getAllDeclaredFields().forEach { field ->
+            try {
+                val ptx = genericsContext?.let { field.buildParameterContext(genericsContext) }
+                    ?: ParameterTypeContext.forField(field)
+                setNewFieldValue(field, ptx, clazzInstance, depth, isRecursiveWithUnsafe)
+            } catch (_: Throwable) {
+                println("CANT SET FIELD ${field.name}")
+            }
         }
         return clazzInstance
     }
