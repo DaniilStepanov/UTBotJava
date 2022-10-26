@@ -1,7 +1,6 @@
 package org.utbot.engine.greyboxfuzzer.generator
 
 
-import PropertiesGenerator
 import org.utbot.quickcheck.NonTrackingGenerationStatus
 import org.utbot.quickcheck.generator.*
 import org.utbot.quickcheck.generator.java.time.*

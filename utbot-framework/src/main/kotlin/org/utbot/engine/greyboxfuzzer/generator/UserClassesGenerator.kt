@@ -56,90 +56,90 @@ class UserClassesGenerator : ComponentizedGenerator<Any>(Any::class.java) {
         return Any::class.java.rawType
     }
 
-    fun generate(random: SourceOfRandomness?, status: GenerationStatus?, generationMethod: GenerationMethod): Any? {
+    fun generate(random: SourceOfRandomness?, status: GenerationStatus?, generationMethod: GenerationMethod): UtModel? {
         this.generationMethod = generationMethod
         return generate(random, status)
     }
 
     override fun generate(random: SourceOfRandomness?, status: GenerationStatus?): UtModel? {
-        return null
-//        clazz ?: return null
-//        if (depth >= DataGeneratorSettings.maxDepthOfGeneration) return null
-//        val parameterType = parameterTypeContext!!.getResolvedType()
-//        println("TRYING TO GENERATE $parameterType depth: $depth")
-//        //TODO! generate inner classes instances
-//        //if (TypeUtils.getOuter(resolvedJavaType) != null) return null
-//        if (parameterType.toString().substringBefore('<')
-//                .contains("$") && !clazz!!.hasModifiers(Modifier.STATIC)
-//        ) return null
-//        if (parameterType.componentClass.name == "java.lang.Object") {
-//            return DataGeneratorSettings.generatorRepository
-//                .getGenerators()
-//                .toList()
-//                .flatMap { it.second }
-//                .filter { !it.hasComponents() }
-//                .randomOrNull()
-//                ?.generate(DataGeneratorSettings.sourceOfRandomness, DataGeneratorSettings.genStatus)
-//        }
+        clazz ?: return null
+        if (depth >= DataGeneratorSettings.maxDepthOfGeneration) return null
+        val parameterType = parameterTypeContext!!.getResolvedType()
+        println("TRYING TO GENERATE $parameterType depth: $depth")
+        //TODO! generate inner classes instances
+        //if (TypeUtils.getOuter(resolvedJavaType) != null) return null
+        if (parameterType.toString().substringBefore('<')
+                .contains("$") && !clazz!!.hasModifiers(Modifier.STATIC)
+        ) return null
+        if (parameterType.componentClass.name == "java.lang.Object") {
+            return DataGeneratorSettings.generatorRepository
+                .getGenerators()
+                .toList()
+                .flatMap { it.second }
+                .filter { !it.hasComponents() }
+                .randomOrNull()
+                ?.generate(DataGeneratorSettings.sourceOfRandomness, DataGeneratorSettings.genStatus)
+        }
 //        if (parameterType.componentClass.name == "java.lang.Class") return generateClass()
 //        else if (parameterType.componentClass.name == "java.lang.reflect.Type") return generateType()
-//        val modifiers = parameterType.componentClass.modifiers
-//        val resolvedJavaType = parameterTypeContext!!.getGenericContext().resolveType(parameterTypeContext!!.type())
-//        val gctx = createGenericsContext(resolvedJavaType, clazz!!)
-//        if (modifiers.and(Modifier.ABSTRACT) > 0 || modifiers.and(Modifier.INTERFACE) > 0) {
-//            return InterfaceImplementersGenerator.generateImplementerInstance(
-//                resolvedJavaType, parameterTypeContext!!, depth, generationMethod == GenerationMethod.UNSAFE
-//            )
-//        }
-//        val typeOfGenerations = when (generationMethod) {
-//            GenerationMethod.CONSTRUCTOR -> mutableListOf('c')
-//            GenerationMethod.STATIC -> mutableListOf('s')
-//            GenerationMethod.STATIC_EXT -> mutableListOf('e')
-//            GenerationMethod.UNSAFE -> mutableListOf('u')
-//            else -> mutableListOf('c', 'c', 's', 'e', 'u')
-//        }
-//        while (true) {
-//            val randomTypeOfGeneration = typeOfGenerations.randomOrNull() ?: return null
-//            val generatedInstance =
-//                when (randomTypeOfGeneration) {
-//                    'c' -> InstancesGenerator.generateInstanceViaConstructor(
-//                        resolvedJavaType.toClass()!!,
-//                        gctx,
-//                        parameterTypeContext!!.getGenericContext(),
-//                        depth
-//                    )
-//                    's' -> InstancesGenerator.generateInstanceWithStatics(
-//                        Types.forJavaLangReflectType(resolvedJavaType),
-//                        gctx,
-//                        parameterTypeContext!!,
-//                        depth
-//                    )
-//                    'e' -> run {
-//                        val staticGenerators =
-//                            SootStaticsCollector.getStaticInstancesOf(parameterTypeContext!!.rawClass)
-//                        if (staticGenerators.isNotEmpty()) {
-//                            val randomMethod = staticGenerators.chooseRandomMethodToGenerateInstance()
-//                            if (randomMethod != null) {
-//                                InstancesGenerator.generateInterfaceInstanceViaStaticCall(
-//                                    randomMethod,
-//                                    parameterTypeContext!!,
-//                                    depth
-//                                )
-//                            } else {
-//                                null
-//                            }
-//                        } else {
-//                            null
-//                        }
-//                    }
+        val modifiers = parameterType.componentClass.modifiers
+        val resolvedJavaType = parameterTypeContext!!.getGenericContext().resolveType(parameterTypeContext!!.type())
+        val gctx = createGenericsContext(resolvedJavaType, clazz!!)
+        if (modifiers.and(Modifier.ABSTRACT) > 0 || modifiers.and(Modifier.INTERFACE) > 0) {
+            return InterfaceImplementersGenerator.generateImplementerInstance(
+                resolvedJavaType, parameterTypeContext!!, depth, generationMethod == GenerationMethod.UNSAFE
+            )
+        }
+        val typeOfGenerations = when (generationMethod) {
+            GenerationMethod.CONSTRUCTOR -> mutableListOf('c')
+            GenerationMethod.STATIC -> mutableListOf('s')
+            GenerationMethod.STATIC_EXT -> mutableListOf('e')
+            GenerationMethod.UNSAFE -> mutableListOf('u')
+            else -> mutableListOf('c', 'c', 's', 'e')
+        }
+        while (true) {
+            val randomTypeOfGeneration = typeOfGenerations.randomOrNull() ?: return null
+            val generatedInstance =
+                when (randomTypeOfGeneration) {
+                    'c' -> InstancesGenerator.generateInstanceViaConstructor(
+                        resolvedJavaType.toClass()!!,
+                        gctx,
+                        parameterTypeContext!!.getGenericContext(),
+                        depth
+                    )
+                    's' -> InstancesGenerator.generateInstanceWithStatics(
+                        Types.forJavaLangReflectType(resolvedJavaType),
+                        gctx,
+                        parameterTypeContext!!,
+                        depth
+                    )
+                    'e' -> run {
+                        val staticGenerators =
+                            SootStaticsCollector.getStaticInstancesOf(parameterTypeContext!!.rawClass)
+                        if (staticGenerators.isNotEmpty()) {
+                            val randomMethod = staticGenerators.chooseRandomMethodToGenerateInstance()
+                            if (randomMethod != null) {
+                                InstancesGenerator.generateInterfaceInstanceViaStaticCall(
+                                    randomMethod,
+                                    parameterTypeContext!!,
+                                    depth
+                                )
+                            } else {
+                                null
+                            }
+                        } else {
+                            null
+                        }
+                    }
+                    else -> null
 //                    else -> InstancesGenerator.generateInstanceWithUnsafe(
 //                        resolvedJavaType.toClass()!!,
 //                        depth,
 //                        generationMethod == GenerationMethod.UNSAFE,
 //                        gctx
 //                    )
-//                }
-//            generatedInstance?.let { return it } ?: typeOfGenerations.removeIf { it == randomTypeOfGeneration }
-//        }
+                }
+            generatedInstance?.let { return it } ?: typeOfGenerations.removeIf { it == randomTypeOfGeneration }
+        }
     }
 }

@@ -2,7 +2,11 @@ package org.utbot.example;
 
 import java.util.ArrayList;
 
-interface A<R extends Number> {
+class A<R extends Number> {
+    public A(int a, R at) {
+        this.a = a;
+        this.at = at;
+    }
 
     public class Lil {
         int a = 1;
@@ -13,13 +17,14 @@ interface A<R extends Number> {
     }
 
     int a = 1;
+    R at;
     final int b = 1;
     static int c = 2;
 
-    public int lol(R a, ArrayList<R> arr);
-    public static <R extends Number> A<R> getInstance1(R a, ArrayList<R> arr) {
-        return new B<R>(a, 777, arr);
-    }
+    //public int lol(R a, ArrayList<R> arr);
+//    public static <R extends Number> A<R> getInstance1(R a, ArrayList<R> arr) {
+//        return new B<R>(a, 777, arr);
+//    }
 
 
     //    public static final A<Number> numberA = new A<Number>(1, 3L, null);

@@ -24,6 +24,7 @@
 */
 
 package org.utbot.quickcheck.generator.java.util;
+import org.utbot.engine.greyboxfuzzer.util.UtModelGenerator;
 import org.utbot.framework.plugin.api.UtModel;
 
 import org.utbot.framework.plugin.api.UtNullModel;
@@ -98,20 +99,20 @@ public final class RFC4122 {
             SourceOfRandomness random,
             GenerationStatus status) {
 
-//            digest.reset();
-//
-//            Namespaces namespaces =
-//                namespace == null ? Namespaces.URL : namespace.value();
-//            digest.update(namespaces.bytes);
-//            digest.update(
-//                strings.generate(random, status)
-//                    .getBytes(StandardCharsets.UTF_8));
-//
-//            byte[] hash = digest.digest();
-//            setVersion(hash, (byte) versionMask);
-//            setVariant(hash);
-//            return newUUID(hash);
-            return new UtNullModel(classIdForType(UUID.class));
+            digest.reset();
+
+            Namespaces namespaces =
+                namespace == null ? Namespaces.URL : namespace.value();
+            digest.update(namespaces.bytes);
+            digest.update(
+                strings.generateValue(random, status)
+                    .getBytes(StandardCharsets.UTF_8));
+
+            byte[] hash = digest.digest();
+            setVersion(hash, (byte) versionMask);
+            setVariant(hash);
+            final UUID generatedUUID = newUUID(hash);
+            return UtModelGenerator.getUtModelConstructor().construct(generatedUUID, UUID.class);
         }
 
         protected void setNamespace(Namespace namespace) {

@@ -30,12 +30,11 @@ object DataGenerator {
         parameterTypeContext: ParameterTypeContext,
         parameter: Parameter,
         parameterIndex: Int,
-        utModelConstructor: UtModelConstructor,
         random: SourceOfRandomness,
         status: GenerationStatus
     ): FParameter {
         val generator = generatorRepository.getOrProduceGenerator(parameterTypeContext, parameterIndex)
-        return generate(generator, parameter, utModelConstructor, random, status)
+        return generate(generator, parameter, random, status)
     }
 
     fun generate(
@@ -44,37 +43,40 @@ object DataGenerator {
         status: GenerationStatus
     ) = generatorRepository.getOrProduceGenerator(clazz)?.generate(random, status)
 
+    fun generate(
+        parameterTypeContext: ParameterTypeContext,
+        random: SourceOfRandomness,
+        status: GenerationStatus
+    ) = generatorRepository.getOrProduceGenerator(parameterTypeContext, 0)?.generate(random, status)
 
     fun generate(
         parameter: Parameter,
         parameterIndex: Int,
-        utModelConstructor: UtModelConstructor,
         random: SourceOfRandomness,
         status: GenerationStatus
     ): FParameter {
         val generator =
             generatorRepository.getOrProduceGenerator(parameter, parameterIndex)
                 ?.also { GeneratorConfigurator.configureGenerator(it, 80) }
-        return generate(generator, parameter, utModelConstructor, random, status)
+        return generate(generator, parameter, random, status)
     }
 
     private fun generate(
         generator: Generator<*>?,
         parameter: Parameter,
-        utModelConstructor: UtModelConstructor,
         random: SourceOfRandomness,
         status: GenerationStatus,
     ): FParameter {
         generatorRepository.removeGenerator(Any::class.java)
         val classId = classIdForType(parameter.type)
-        var generatedValue: Any?
+        var generatedValue: UtModel?
 
         repeat(3) {
             println("TRY $it")
             try {
                 generatedValue = generator?.generate(random, status)
                 if (generatedValue != null) {
-                    ZestUtils.setUnserializableFieldsToNull(generatedValue!!)
+                    //ZestUtils.setUnserializableFieldsToNull(generatedValue!!)
                     try {
                         println("GENERATED VALUE OF TYPE ${parameter.parameterizedType} = $generatedValue")
                     } catch (e: Exception) {
@@ -82,13 +84,13 @@ object DataGenerator {
                     }
                     println("OK")
 
-                    val constructedUtModel =
-                        utModelConstructor.constructWithTimeoutOrNull(generatedValue, classId) ?: UtNullModel(classId)
-                    println("UtModel = $constructedUtModel")
+//                    val constructedUtModel =
+//                        utModelConstructor.constructWithTimeoutOrNull(generatedValue, classId) ?: UtNullModel(classId)
+                    //println("UtModel = $constructedUtModel")
                     val fParam = FParameter(
                         parameter,
                         generatedValue,
-                        constructedUtModel,
+                        generatedValue!!,
                         //utModelConstructor.construct(generatedValue, classIdForType(generatedValue!!.javaClass)),
                         generator,
                         emptyList()

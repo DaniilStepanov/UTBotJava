@@ -23,6 +23,8 @@ import org.utbot.common.debug
 import org.utbot.common.workaround
 import org.utbot.engine.MockStrategy.NO_MOCKS
 import org.utbot.engine.greyboxfuzzer.GreyBoxFuzzer
+import org.utbot.engine.greyboxfuzzer.generator.DataGenerator
+import org.utbot.engine.greyboxfuzzer.generator.DataGeneratorSettings
 import org.utbot.engine.greyboxfuzzer.generator.InstancesGenerator
 import org.utbot.engine.greyboxfuzzer.util.ZestUtils
 import org.utbot.engine.pc.UtArraySelectExpression
@@ -482,68 +484,74 @@ class UtBotSymbolicEngine(
 //    }
 
     //Simple fuzzing
-    fun fuzzing(until: Long = Long.MAX_VALUE, modelProvider: (ModelProvider) -> ModelProvider = { it }) = flow<UtResult> {
-        GenericsInfoFactory.disableCache()
-        val executableId = if (methodUnderTest.isConstructor) {
-            methodUnderTest.javaConstructor!!.executableId
-        } else {
-            methodUnderTest.javaMethod!!.executableId
-        }
-
-        val isFuzzable = executableId.parameters.all { classId ->
-            classId != Method::class.java.id //&& // causes the child process crash at invocation
-                    //classId != Class::class.java.id  // causes java.lang.IllegalAccessException: java.lang.Class at sun.misc.Unsafe.allocateInstance(Native Method)
-        }
-        if (!isFuzzable) {
-            return@flow
-        }
-
-        val g = ReferencePreservingIntIdGenerator()
-        val fallbackModelProvider = FallbackModelProvider(g)
-
-        val thisInstance = when {
-            methodUnderTest.isStatic -> null
-            methodUnderTest.isConstructor -> if (
-                methodUnderTest.clazz.isAbstract ||  // can't instantiate abstract class
-                methodUnderTest.clazz.java.isEnum    // can't reflectively create enum objects
-            ) {
-                return@flow
+    fun fuzzing(until: Long = Long.MAX_VALUE, modelProvider: (ModelProvider) -> ModelProvider = { it }) =
+        flow<UtResult> {
+            GenericsInfoFactory.disableCache()
+            val executableId = if (methodUnderTest.isConstructor) {
+                methodUnderTest.javaConstructor!!.executableId
             } else {
-                null
+                methodUnderTest.javaMethod!!.executableId
             }
-            else -> {
-                fallbackModelProvider.toModel(methodUnderTest.clazz).apply {
-                    if (this is UtNullModel) { // it will definitely fail because of NPE,
-                        return@flow
+
+            val isFuzzable = executableId.parameters.all { classId ->
+                classId != Method::class.java.id //&& // causes the child process crash at invocation
+                //classId != Class::class.java.id  // causes java.lang.IllegalAccessException: java.lang.Class at sun.misc.Unsafe.allocateInstance(Native Method)
+            }
+            if (!isFuzzable) {
+                return@flow
+            }
+
+            val g = ReferencePreservingIntIdGenerator()
+            val fallbackModelProvider = FallbackModelProvider(g)
+
+            val thisInstance = when {
+                methodUnderTest.isStatic -> null
+                methodUnderTest.isConstructor -> if (
+                    methodUnderTest.clazz.isAbstract ||  // can't instantiate abstract class
+                    methodUnderTest.clazz.java.isEnum    // can't reflectively create enum objects
+                ) {
+                    return@flow
+                } else {
+                    null
+                }
+                else -> {
+                    fallbackModelProvider.toModel(methodUnderTest.clazz).apply {
+                        if (this is UtNullModel) { // it will definitely fail because of NPE,
+                            return@flow
+                        }
                     }
                 }
             }
-        }
 
-        val methodUnderTestDescription = FuzzedMethodDescription(executableId, collectConstantsForFuzzer(graph))
-        //val modelProviderWithFallback = modelProvider(defaultModelProviders { nextDefaultModelId++ }).withFallback(fallbackModelProvider::toModel)
-        val coveredInstructionTracker = mutableSetOf<Instruction>()
-        //var attempts = UtSettings.fuzzingMaxAttemps
+            val methodUnderTestDescription = FuzzedMethodDescription(executableId, collectConstantsForFuzzer(graph))
+            //val modelProviderWithFallback = modelProvider(defaultModelProviders { nextDefaultModelId++ }).withFallback(fallbackModelProvider::toModel)
+            val coveredInstructionTracker = mutableSetOf<Instruction>()
+            //var attempts = UtSettings.fuzzingMaxAttemps
 
-        val clazz = methodUnderTest.clazz.java
-        var myThisInstance =
-            if (!methodUnderTest.isStatic) {
-                //thisInstance
-                //InstancesGenerator.generateInstanceWithDefaultConstructorOrUnsafe(clazz)
-                //InstancesGenerator.generateInstanceWithUnsafe(clazz, 0, false, null) ?: thisInstance
-                thisInstance
-            } else {
-                null
-            }
-        try {
-            if (myThisInstance != null) {
-                if (!ZestUtils.setUnserializableFieldsToNull(myThisInstance)) {
-                    myThisInstance = thisInstance
+            val clazz = methodUnderTest.clazz.java
+            var myThisInstance =
+                if (!methodUnderTest.isStatic) {
+                    //thisInstance
+                    //InstancesGenerator.generateInstanceWithDefaultConstructorOrUnsafe(clazz)
+                    //InstancesGenerator.generateInstanceWithUnsafe(clazz, 0, false, null) ?: thisInstance
+                    DataGenerator.generate(
+                        clazz,
+                        DataGeneratorSettings.sourceOfRandomness,
+                        DataGeneratorSettings.genStatus
+                    ) ?: thisInstance
+                } else {
+                    thisInstance
                 }
-            }
-        } catch (e: Throwable) {
-            myThisInstance = thisInstance
-        }
+            println("MY THIS INSTANCE = $myThisInstance")
+//        try {
+//            if (myThisInstance != null) {
+//                if (!ZestUtils.setUnserializableFieldsToNull(myThisInstance)) {
+//                    myThisInstance = thisInstance
+//                }
+//            }
+//        } catch (e: Throwable) {
+//            myThisInstance = thisInstance
+//        }
 //        if (myThisInstance != null && !ZestUtils.setUnserializableFieldsToNull(myThisInstance)) {
 //            myThisInstance = thisInstance
 //        }
@@ -574,16 +582,16 @@ class UtBotSymbolicEngine(
 
 
 //        println("THIS INSTANCE = ${myThisInstance?.toString()}")
-        try {
-            GreyBoxFuzzer(concreteExecutor, methodUnderTest, listOf(), myThisInstance, fallbackModelProvider).fuzz()
-        } catch (e: CancellationException) {
-            logger.debug { "Cancelled by timeout" }
-        } catch (e: ConcreteExecutionFailureException) {
-            emitFailedConcreteExecutionResult(EnvironmentModels(thisInstance, listOf(), mapOf()), e)
-        } catch (e: Throwable) {
-            emit(UtError("Default concrete execution failed", e))
-        }
-        return@flow
+            try {
+                GreyBoxFuzzer(concreteExecutor, methodUnderTest, listOf(), myThisInstance!!, fallbackModelProvider).fuzz()
+            } catch (e: CancellationException) {
+                logger.debug { "Cancelled by timeout" }
+            } catch (e: ConcreteExecutionFailureException) {
+                emitFailedConcreteExecutionResult(EnvironmentModels(thisInstance, listOf(), mapOf()), e)
+            } catch (e: Throwable) {
+                emit(UtError("Default concrete execution failed", e))
+            }
+            return@flow
 //        fuzz(methodUnderTestDescription, modelProviderWithFallback).forEachIndexed { index, parameters ->
 //            val initialEnvironmentModels = EnvironmentModels(thisInstance, parameters, mapOf())
 //
@@ -626,7 +634,7 @@ class UtBotSymbolicEngine(
 //                emit(UtError("Default concrete execution failed", e))
 //            }
 //        }
-    }
+        }
 
     private suspend fun FlowCollector<UtResult>.emitFailedConcreteExecutionResult(
         stateBefore: EnvironmentModels,

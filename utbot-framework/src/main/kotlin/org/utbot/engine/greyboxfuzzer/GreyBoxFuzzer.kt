@@ -2,10 +2,7 @@ package org.utbot.engine.greyboxfuzzer
 
 import org.utbot.engine.displayName
 import org.utbot.engine.executeConcretely
-import org.utbot.engine.greyboxfuzzer.generator.DataGenerator
-import org.utbot.engine.greyboxfuzzer.generator.DataGeneratorSettings
-import org.utbot.engine.greyboxfuzzer.generator.InstancesGenerator
-import org.utbot.engine.greyboxfuzzer.generator.getOrProduceGenerator
+import org.utbot.engine.greyboxfuzzer.generator.*
 import org.utbot.engine.greyboxfuzzer.mutator.Mutator
 import org.utbot.engine.greyboxfuzzer.mutator.Seed
 import org.utbot.engine.greyboxfuzzer.mutator.SeedCollector
@@ -18,6 +15,8 @@ import org.utbot.framework.concrete.UtConcreteExecutionResult
 import org.utbot.framework.concrete.UtExecutionInstrumentation
 import org.utbot.framework.concrete.UtModelConstructor
 import org.utbot.framework.plugin.api.*
+import org.utbot.framework.plugin.api.util.fieldId
+import org.utbot.framework.plugin.api.util.jClass
 import org.utbot.framework.plugin.api.util.signature
 import org.utbot.framework.plugin.api.util.utContext
 import org.utbot.fuzzer.FallbackModelProvider
@@ -38,49 +37,16 @@ class GreyBoxFuzzer(
     private val concreteExecutor: ConcreteExecutor<UtConcreteExecutionResult, UtExecutionInstrumentation>,
     private val methodUnderTest: UtMethod<*>,
     private val instrumentation: List<UtInstrumentation>,
-    private var thisInstance: Any?,
+    private var thisInstance: UtModel,
     private val fallbackModelProvider: FallbackModelProvider
 ) {
 
     private val seeds = SeedCollector()
     val kfunction = methodUnderTest.callable as KFunction<*>
-    private val explorationStageIterations = 1
+    private val explorationStageIterations = 10
     val exploitationStageIterations = 100
 
     suspend fun fuzz(): Sequence<List<UtModel>> {
-        try {
-            println("GENERATING")
-            val p = methodUnderTest.javaMethod!!.parameters.first()
-            println("p = ${p.name}")
-            val generator = DataGeneratorSettings.generatorRepository.getOrProduceGenerator(p, 0)
-            println("G = $generator")
-            val generatedValue = generator?.generate(DataGeneratorSettings.sourceOfRandomness, DataGeneratorSettings.genStatus)!!
-            val thisInstanceAsUtModel = createUtModelFromThis(thisInstance, GraphAlgorithms::class.java, UtModelGenerator.utModelConstructor)
-            val newStateBefore = EnvironmentModels(thisInstanceAsUtModel, listOf(generatedValue), mapOf())
-            val er = execute(newStateBefore, methodUnderTest)
-            println("EXECUTION RESULT = $er")
-            println(er!!.result)
-        } catch (e: Throwable) {
-            println(e)
-        }
-        exitProcess(0)
-
-//        try {
-//            val generator = DataGeneratorSettings.generatorRepository.getOrProduceGenerator(p, 0)!!
-//            val gen = generator.generate(DataGeneratorSettings.sourceOfRandomness, DataGeneratorSettings.genStatus)
-//            println("GENERATED = $gen")
-//            exitProcess(0)
-//            val linkedHashMap = LinkedHashMapGenerator().generate(
-//                DataGeneratorSettings.sourceOfRandomness,
-//                DataGeneratorSettings.genStatus
-//            )
-//
-//        } catch (e: Throwable) {
-//            println("E = $e")
-//        }
-        exitProcess(0)
-
-
         println("STARTED TO FUZZ ${kfunction.name}")
         val method = kfunction.javaMethod!!
 //        FieldInformationCollector().collectInfo(methodUnderTest)
@@ -124,22 +90,28 @@ class GreyBoxFuzzer(
         val method = kfunction.javaMethod ?: return
         val parametersToGenericsReplacer = method.parameters.map { it to GenericsReplacer() }
         repeat(numberOfIterations) { iterationNumber ->
+            //UtModelGenerator.reset()
             println("Iteration number $iterationNumber")
-            val m = IdentityHashMap<Any, UtModel>()
-            val modelConstructor = UtModelConstructor(m)
-            if (thisInstance != null && iterationNumber != 0) {
+
+            thisInstance = InstancesGenerator.regenerateFields(clazz, thisInstance as UtAssembleModel, classFieldsUsedByFunc.toList())
+            println(thisInstance)
+//            println("THIS = $thisInstance")
+//            exitProcess(0)
+////            val m = IdentityHashMap<Any, UtModel>()
+////            val modelConstructor = UtModelConstructor(m)
+            if (iterationNumber != 0) {
                 if (Random.getTrue(20)) {
                     println("REGENERATE THIS")
                     thisInstance = DataGenerator.generate(
                         clazz,
                         DataGeneratorSettings.sourceOfRandomness,
                         DataGeneratorSettings.genStatus
-                    )
-                } else {
-                    println("REGENERATE FIELDS OF THIS")
-                    InstancesGenerator.regenerateFields(clazz, thisInstance!!, classFieldsUsedByFunc.toList())
+                    )!!
+                } else if (thisInstance is UtAssembleModel) {
+                    thisInstance =
+                        InstancesGenerator.regenerateFields(clazz, thisInstance as UtAssembleModel, classFieldsUsedByFunc.toList())
                 }
-                ZestUtils.setUnserializableFieldsToNull(thisInstance!!)
+                //ZestUtils.setUnserializableFieldsToNull(thisInstance!!)
             }
             when {
                 Random.getTrue(10) -> parametersToGenericsReplacer.map { it.second.revert() }
@@ -154,21 +126,14 @@ class GreyBoxFuzzer(
                     DataGenerator.generate(
                         parameter,
                         index,
-                        modelConstructor,
                         DataGeneratorSettings.sourceOfRandomness,
                         DataGeneratorSettings.genStatus
                     ) to classIdForType(parameter.type)
                 }
-            //val generatedParametersAsUtModels = constructModelsFromValues(generatedParameters, modelConstructor)
-            val thisInstanceAsUtModel = createUtModelFromThis(thisInstance, clazz, modelConstructor)
-            val throwableModel = fallbackModelProvider.toModel(Throwable::class)
-            println(throwableModel)
-            val newStateBefore = EnvironmentModels(thisInstanceAsUtModel, listOf(throwableModel), mapOf())
-            val er = execute(newStateBefore, methodUnderTest)
-            println(er)
-            exitProcess(0)
+            println("GENERATED PARAMETERS = $generatedParameters")
+            //val thisInstanceAsUtModel = createUtModelFromThis(thisInstance, clazz)
             val stateBefore =
-                EnvironmentModels(thisInstanceAsUtModel, generatedParameters.map { it.first.utModel }, mapOf())
+                EnvironmentModels(thisInstance, generatedParameters.map { it.first.utModel }, mapOf())
             try {
                 val executionResult = execute(stateBefore, methodUnderTest)
                 val seedScore =
@@ -237,7 +202,7 @@ class GreyBoxFuzzer(
             println("AFTER = ${mutatedArgument!!.utModel}")
             if (mutatedArgument?.utModel == null) return@repeat
             randomSeedArgumentsAsUtModels[randomParameterIndex] = mutatedArgument.utModel
-            val thisInstanceAsUtModel = createUtModelFromThis(thisInstance, clazz, modelConstructor)
+            val thisInstanceAsUtModel = createUtModelFromThis(thisInstance, clazz)
             val stateBefore =
                 EnvironmentModels(thisInstanceAsUtModel, randomSeedArgumentsAsUtModels, mapOf())
             //println(stateBefore)
@@ -303,13 +268,13 @@ class GreyBoxFuzzer(
     private fun createUtModelFromThis(
         thisInstance: Any?,
         clazz: Class<*>,
-        modelConstructor: UtModelConstructor
     ): UtModel? =
         if (thisInstance is UtModel) {
             thisInstance
         } else if (thisInstance != null) {
             val classId = classIdForType(clazz)
-            modelConstructor.constructWithTimeoutOrNull(thisInstance, classId) ?: UtNullModel(classId)
+            UtModelGenerator.utModelConstructor.constructWithTimeoutOrNull(thisInstance, classId)
+                ?: UtNullModel(classId)
         } else {
             if (methodUnderTest.isStatic) {
                 null

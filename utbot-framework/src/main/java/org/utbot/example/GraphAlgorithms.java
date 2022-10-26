@@ -1,8 +1,6 @@
 package org.utbot.example;
 
-import java.io.File;
 import java.util.*;
-import java.util.concurrent.ThreadPoolExecutor;
 
 public class GraphAlgorithms<T extends Number> {
     public GraphAlgorithms(T lol) {
@@ -65,13 +63,27 @@ public class GraphAlgorithms<T extends Number> {
 //        return a.get(a.size() - 1);
 //    }
 
-    public Integer testFunc3(List<Integer> map) {
-        return map.get(0);
+    public Number testFunc3() {
+        if (this.lol instanceof Integer) {
+            return ((Integer) this.lol + 1);
+        }
+        if (this.lol instanceof Short) {
+            return ((Short) this.lol + 1);
+        }
+        if (this.lol instanceof Long) {
+            return ((Long) this.lol + 1);
+        }
+        if (this.lol instanceof Double) {
+            return ((Double) this.lol + 1);
+        }
+        if (this.lol instanceof Float) {
+            return ((Float) this.lol + 1);
+        }
+        return this.lol;
     }
 
     public void lol() {
     }
-
 
 //    public boolean testFunc3(java.util.concurrent.BlockingQueue<java.lang.Runnable> a) {
 //        for (int i = 0; i < array.size() - 1; i++) {

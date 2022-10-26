@@ -165,7 +165,8 @@ open class UtExecution(
  * - coverage information (instructions) if this execution was obtained from the concrete execution.
  * - comments, method names and display names created by utbot-summary module.
  */
-class UtSymbolicExecution(
+class
+UtSymbolicExecution(
     stateBefore: EnvironmentModels,
     stateAfter: EnvironmentModels,
     result: UtExecutionResult,
@@ -497,7 +498,7 @@ data class UtAssembleModel(
     override val classId: ClassId,
     override val modelName: String,
     val instantiationChain: List<UtStatementModel> = emptyList(),
-    val modificationsChain: List<UtStatementModel> = emptyList(),
+    var modificationsChain: List<UtStatementModel> = emptyList(),
     val origin: UtCompositeModel? = null,
     val initialInstance: UtReferenceModel? = null
 ) : UtReferenceModel(id, classId, modelName) {

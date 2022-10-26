@@ -24,19 +24,25 @@
 */
 
 package org.utbot.quickcheck.generator.java.util;
-import org.utbot.engine.greyboxfuzzer.util.UtModelGenerator;
-import org.utbot.framework.plugin.api.UtModel;
 
+import org.utbot.engine.greyboxfuzzer.util.UtModelGenerator;
+import org.utbot.framework.concrete.UtModelConstructor;
+import org.utbot.framework.plugin.api.*;
 import org.utbot.quickcheck.generator.*;
 import org.utbot.quickcheck.internal.Lists;
 import org.utbot.quickcheck.random.SourceOfRandomness;
 
 import java.math.BigDecimal;
-import java.util.*;
 import java.util.AbstractMap.SimpleEntry;
+import java.util.*;
 import java.util.Map.Entry;
 import java.util.stream.Stream;
 
+import static java.util.stream.Collectors.toList;
+import static java.util.stream.StreamSupport.stream;
+import static org.utbot.external.api.UtModelFactoryKt.classIdForType;
+import static org.utbot.framework.plugin.api.util.IdUtilKt.getObjectClassId;
+import static org.utbot.framework.plugin.api.util.IdUtilKt.methodId;
 import static org.utbot.quickcheck.internal.Lists.removeFrom;
 import static org.utbot.quickcheck.internal.Lists.shrinksOfOneItem;
 import static org.utbot.quickcheck.internal.Ranges.Type.INTEGRAL;
@@ -44,8 +50,6 @@ import static org.utbot.quickcheck.internal.Ranges.checkRange;
 import static org.utbot.quickcheck.internal.Reflection.findConstructor;
 import static org.utbot.quickcheck.internal.Reflection.instantiate;
 import static org.utbot.quickcheck.internal.Sequences.halving;
-import static java.util.stream.Collectors.toList;
-import static java.util.stream.StreamSupport.stream;
 
 /**
  * <p>Base class for generators of {@link Map}s.</p>
@@ -100,25 +104,39 @@ public abstract class MapGenerator<T extends Map>
 
         int size = size(random, status);
 
-        Generator<?> keyGenerator = componentGenerators().get(0);
-        Stream<?> keyStream =
-            Stream.generate(() -> keyGenerator.generate(random, status))
-                .sequential();
-        if (distinct)
-            keyStream = keyStream.distinct();
+        final UtModelConstructor modelConstructor = UtModelGenerator.getUtModelConstructor();
+        final ClassId classId = classIdForType(types().get(0));
+        final Generator<?> keyGenerator = componentGenerators().get(0);
+        final Generator<?> valueGenerator = componentGenerators().get(1);
 
-        T items = empty();
-        Generator<?> valueGenerator = componentGenerators().get(1);
-        keyStream
-            .map(key ->
-                new SimpleEntry<>(
-                    key,
-                    valueGenerator.generate(random, status)))
-            .filter(entry -> okToAdd(entry.getKey(), entry.getValue()))
-            .limit(size)
-            .forEach(entry -> items.put(entry.getKey(), entry.getValue()));
+        final ExecutableId constructorId = new ConstructorId(classId, List.of());
+        final int generatedModelId = modelConstructor.computeUnusedIdAndUpdate();
+        final List<UtStatementModel> instantiationChain = new ArrayList<>();
+        final List<UtStatementModel> modificationChain = new ArrayList<>();
 
-        return UtModelGenerator.getUtModelConstructor().construct(new LinkedHashMap(), Map.class);
+        final UtAssembleModel generatedModel = new UtAssembleModel(
+                generatedModelId,
+                classId,
+                constructorId.getName() + "#" + generatedModelId,
+                instantiationChain,
+                modificationChain,
+                null,
+                null
+        );
+        instantiationChain.add(new UtExecutableCallModel(null, constructorId, List.of(), generatedModel));
+
+        final ExecutableId putMethodId = methodId(classId, "put", getObjectClassId(), getObjectClassId(), getObjectClassId());
+
+        int i = 0;
+        while (i < size) {
+            final UtModel key = keyGenerator.generate(random, status);
+            final UtModel value = valueGenerator.generate(random, status);
+            if (!okToAdd(key, value)) continue;
+            i++;
+            modificationChain.add(new UtExecutableCallModel(generatedModel, putMethodId, List.of(key, value), null));
+        }
+
+        return generatedModel;
     }
 
     @Override public List<T> doShrink(SourceOfRandomness random, T larger) {

@@ -1,3 +1,5 @@
+package org.utbot.quickcheck.generator.java.util;
+
 /*
  The MIT License
 
@@ -24,9 +26,10 @@
 */
 
 
-import org.utbot.framework.plugin.api.UtModel;
+import org.utbot.engine.greyboxfuzzer.util.UtModelGenerator;
+import org.utbot.framework.concrete.UtModelConstructor;
+import org.utbot.framework.plugin.api.*;
 
-import org.utbot.framework.plugin.api.UtNullModel;
 import org.utbot.quickcheck.generator.GenerationStatus;
 import org.utbot.quickcheck.generator.Generator;
 import org.utbot.quickcheck.generator.java.lang.AbstractStringGenerator;
@@ -40,6 +43,8 @@ import java.util.*;
 import static java.math.BigDecimal.ZERO;
 import static java.util.Arrays.asList;
 import static org.utbot.external.api.UtModelFactoryKt.classIdForType;
+import static org.utbot.framework.plugin.api.util.IdUtilKt.getObjectClassId;
+import static org.utbot.framework.plugin.api.util.IdUtilKt.methodId;
 
 /**
  * Produces values of type {@link Properties}.
@@ -57,21 +62,41 @@ public class PropertiesGenerator extends Generator<Properties> {
         stringGenerator = encoded;
     }
 
-    @Override public UtModel generate(
-        SourceOfRandomness random,
-        GenerationStatus status) {
+    @Override
+    public UtModel generate(
+            SourceOfRandomness random,
+            GenerationStatus status) {
 
         int size = status.size();
 
-        Properties properties = new Properties();
-//        for (int i = 0; i < size; ++i) {
-//            properties.setProperty(
-//                stringGenerator.generate(random, status),
-//                stringGenerator.generate(random, status));
-//        }
-//
-//        return properties;
-        return new UtNullModel(classIdForType(Properties.class));
+        final UtModelConstructor modelConstructor = UtModelGenerator.getUtModelConstructor();
+        final ClassId classId = classIdForType(Properties.class);
+
+        final ExecutableId constructorId = new ConstructorId(classId, List.of());
+        final int generatedModelId = modelConstructor.computeUnusedIdAndUpdate();
+        final List<UtStatementModel> instantiationChain = new ArrayList<>();
+        final List<UtStatementModel> modificationChain = new ArrayList<>();
+
+        final UtAssembleModel generatedModel = new UtAssembleModel(
+                generatedModelId,
+                classId,
+                constructorId.getName() + "#" + generatedModelId,
+                instantiationChain,
+                modificationChain,
+                null,
+                null
+        );
+        instantiationChain.add(new UtExecutableCallModel(null, constructorId, List.of(), generatedModel));
+
+        final ExecutableId setPropertyMethodId = methodId(classId, "setProperty", getObjectClassId(), getObjectClassId(), getObjectClassId());
+
+        for (int i = 0; i < size; i++) {
+            final UtModel key = stringGenerator.generate(random, status);
+            final UtModel value = stringGenerator.generate(random, status);
+            modificationChain.add(new UtExecutableCallModel(generatedModel, setPropertyMethodId, List.of(key, value), null));
+        }
+
+        return generatedModel;
     }
 
     @Override public boolean canRegisterAsType(Class<?> type) {

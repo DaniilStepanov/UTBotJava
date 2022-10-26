@@ -7,6 +7,10 @@ import org.javaruntype.type.Types
 import org.utbot.engine.greyboxfuzzer.util.*
 import org.utbot.engine.isPublic
 import org.utbot.engine.rawType
+import org.utbot.external.api.classIdForType
+import org.utbot.framework.plugin.api.*
+import org.utbot.framework.plugin.api.util.executableId
+import org.utbot.framework.plugin.api.util.fieldId
 import org.utbot.framework.plugin.api.util.signature
 import ru.vyarus.java.generics.resolver.context.GenericsContext
 import ru.vyarus.java.generics.resolver.context.GenericsInfo
@@ -26,7 +30,7 @@ object InstancesGenerator {
         gctx: GenericsContext,
         initGenericContext: GenericsContext,
         depth: Int
-    ): Any? {
+    ): UtModel? {
         val randomPublicConstructor =
             try {
                 clazz.declaredConstructors
@@ -76,14 +80,22 @@ object InstancesGenerator {
                 null
             }
         }
-        //println("PARAMETERS = $parameterValues")
-        return try {
-            constructor.newInstance(*parameterValues.toTypedArray())
-        } catch (e: Exception) {
-            null
-        } catch (e: Error) {
-            null
+        if (parameterValues.any { it == null }) {
+            return UtNullModel(classIdForType(clazz))
         }
+        return UtModelGenerator.utModelConstructor.constructAssembleModelUsingMethodInvocation(
+            clazz,
+            constructor.executableId,
+            parameterValues.filterNotNull()
+        )
+//        return try {
+//            //constructor.newInstance(*parameterValues.toTypedArray())
+//            UtNullModel(classIdForType(clazz))
+//        } catch (e: Exception) {
+//            null
+//        } catch (e: Error) {
+//            null
+//        }
     }
 
     //TODO rewrite this
@@ -92,7 +104,7 @@ object InstancesGenerator {
         gctx: GenericsContext,
         parameterTypeContext: ParameterTypeContext,
         depth: Int
-    ): Any? {
+    ): UtModel? {
         println("VIA STATIC FIELD")
         if (depth > DataGeneratorSettings.maxDepthOfGeneration) return null
         //TODO filter not suitable methods with generics with bad bounds
@@ -122,7 +134,10 @@ object InstancesGenerator {
                 resolvedStaticMethods.randomOrNull() ?: resolvedStaticFields.randomOrNull()
             } ?: return null
         val fieldValue = when (fieldOrMethodToProvideInstance) {
-            is Field -> fieldOrMethodToProvideInstance.getFieldValue(null)
+            is Field ->
+                fieldOrMethodToProvideInstance.getFieldValue(null)?.let {
+                    UtModelGenerator.utModelConstructor.construct(it, classIdForType(it::class.java))
+                } ?: return null
             is Method -> {
                 val parameterValues =
                     if (fieldOrMethodToProvideInstance.typeParameters.isNotEmpty()) {
@@ -146,15 +161,11 @@ object InstancesGenerator {
                         }
                     }
                 fieldOrMethodToProvideInstance.isAccessible = true
-                try {
-                    fieldOrMethodToProvideInstance.invoke(null, *parameterValues.toTypedArray())
-                } catch (e: InvocationTargetException) {
-                    return null
-                } catch (e: Exception) {
-                    return null
-                } catch (e: Error) {
-                    return null
-                }
+                UtModelGenerator.utModelConstructor.constructAssembleModelUsingMethodInvocation(
+                    resolvedType.rawClass,
+                    fieldOrMethodToProvideInstance.executableId,
+                    parameterValues.filterNotNull()
+                )
             }
             else -> return null
         }
@@ -165,7 +176,7 @@ object InstancesGenerator {
         method: Method,
         parameterTypeContext: ParameterTypeContext,
         depth: Int
-    ): Any? {
+    ): UtModel? {
         return try {
             val clazz = method.genericReturnType as? ParameterizedType
             val actualTypeArguments = clazz?.actualTypeArguments?.toList() ?: emptyList()
@@ -178,7 +189,13 @@ object InstancesGenerator {
                 }
             }
             method.isAccessible = true
-            method.invoke(null, *args.toTypedArray())
+            //method.invoke(null, *args.toTypedArray())
+            val clazzAsClass = clazz?.toClass() ?: return null
+            UtModelGenerator.utModelConstructor.constructAssembleModelUsingMethodInvocation(
+                clazzAsClass,
+                method.executableId,
+                args.filterNotNull()
+            )
         } catch (e: Throwable) {
             null
         }
@@ -216,7 +233,7 @@ object InstancesGenerator {
         resolvedType: org.javaruntype.type.Type<*>,
         parameterTypeContext: ParameterTypeContext,
         depth: Int
-    ): List<Any?> {
+    ): List<UtModel?> {
         val parameterType = parameterTypeContext.getGenericContext().resolveType(parameterTypeContext.type())
         val generics = LinkedHashMap<String, Type>()
         (method.genericReturnType as? ParameterizedTypeImpl)?.actualTypeArguments?.forEachIndexed { index, typeVariable ->
@@ -255,7 +272,7 @@ object InstancesGenerator {
         setAllObjectsToNull: Boolean,
         resolvedType: Type? = null,
         depth: Int
-    ): Any? {
+    ): UtModel? {
         //TODO!!!!!!! Make it work for inner classes
         if (fieldOrParameterForGeneration.toString().contains("$")) return null
 
@@ -299,14 +316,14 @@ object InstancesGenerator {
         return generator?.generate(DataGeneratorSettings.sourceOfRandomness, DataGeneratorSettings.genStatus)
     }
 
-    fun generateParameterValue(
+    private fun generateParameterValue(
         parameter: Parameter,
         clazzName: String,
         gctx: GenericsContext,
         setAllObjectsToNull: Boolean,
         resolvedType: Type? = null,
         depth: Int
-    ): Any? =
+    ): UtModel? =
         generateValueOfType(
             parameter,
             gctx,
@@ -339,28 +356,23 @@ object InstancesGenerator {
 //        }
 //    }
 
-    fun regenerateFields(clazz: Class<*>, classInstance: Any, fieldsToRegenerate: List<Field>) {
+    fun regenerateFields(clazz: Class<*>, classInstance: UtAssembleModel, fieldsToRegenerate: List<Field>): UtModel {
         val parameterTypeContext = ParameterTypeContext.forClass(clazz)
+        var resUtModel = classInstance
         for (field in fieldsToRegenerate) {
-            if (Random.getTrue(20)) {
-                field.setDefaultValue(classInstance)
-            } else {
-                setNewFieldValue(field, parameterTypeContext, classInstance, 0, false)
-            }
+            resUtModel = setNewFieldValue(field, parameterTypeContext, classInstance)
         }
+        return resUtModel
     }
 
     private fun setNewFieldValue(
         field: Field,
         parameterTypeContext: ParameterTypeContext,
-        clazzInstance: Any?,
-        depth: Int,
-        isRecursiveWithUnsafe: Boolean
-    ): Any? {
-        if (field.hasModifiers(Modifier.STATIC, Modifier.FINAL)) return null
+        clazzInstance: UtAssembleModel
+    ): UtAssembleModel {
         field.isAccessible = true
         val oldFieldValue = field.getFieldValue(clazzInstance)
-        if (field.hasAtLeastOneOfModifiers(Modifier.STATIC, Modifier.FINAL) && oldFieldValue != null) return null
+        if (field.hasAtLeastOneOfModifiers(Modifier.STATIC, Modifier.FINAL) && oldFieldValue != null) return clazzInstance
         val fieldType = parameterTypeContext.getGenericContext().resolveFieldType(field)
         println("F = $field TYPE = $fieldType OLDVALUE = $oldFieldValue")
         val parameterTypeContextForResolvedType = createParameterTypeContext(
@@ -370,81 +382,97 @@ object InstancesGenerator {
             Types.forJavaLangReflectType(fieldType),
             parameterTypeContext.getGenericContext()
         )
-        val generator = DataGeneratorSettings.generatorRepository.getOrProduceGenerator(
+        val newFieldValue = DataGenerator.generate(
             parameterTypeContextForResolvedType,
-            depth
-        ) ?: return null
-        if (isRecursiveWithUnsafe) {
-            (listOf(generator) + generator.getAllComponents()).forEach {
-                if (it is UserClassesGenerator) it.generationMethod = GenerationMethod.UNSAFE
-            }
-        }
-        println("I GOT GENERATOR!! $generator")
-        var newFieldValue: Any? = null
-        repeat(3) {
-            try {
-                if (newFieldValue == null) {
-                    newFieldValue =
-                        generator.generate(DataGeneratorSettings.sourceOfRandomness, DataGeneratorSettings.genStatus)
-                }
-            } catch (e: Exception) {
-                return@repeat
-            }
-        }
-        println("NEW VALUE GENERATED!!")
+            DataGeneratorSettings.sourceOfRandomness,
+            DataGeneratorSettings.genStatus
+        )
+        println("NEW FIELD VALUE = $newFieldValue")
         if (newFieldValue != null) {
-            try {
-                println("NEW VALUE = ${newFieldValue} CLASS ${newFieldValue!!::class.java}")
-            } catch (e: Throwable) {
-                println("NEW VALUE OF CLASS ${newFieldValue!!::class.java} generated")
-            }
-        }
-        if (newFieldValue != null) {
-            field.setFieldValue(clazzInstance, newFieldValue)
-        }
-        return newFieldValue
-    }
-
-    fun generateInstanceWithUnsafe(
-        clazz: Class<*>,
-        depth: Int,
-        isRecursiveWithUnsafe: Boolean,
-        genericsContext: GenericsContext?
-    ): Any? {
-        println("TRYING TO GENERATE ${clazz.name} instance")
-        if (depth >= DataGeneratorSettings.maxDepthOfGeneration) return null
-        val clazzInstance =
-            try {
-                UserClassesGenerator.UNSAFE.allocateInstance(clazz)
-            } catch (e: Exception) {
-                return null
-            } catch (e: Error) {
-                return null
-            }
-        clazz.getAllDeclaredFields().forEach { field ->
-            try {
-                val ptx = genericsContext?.let { field.buildParameterContext(genericsContext) }
-                    ?: ParameterTypeContext.forField(field)
-                val newFieldValue = setNewFieldValue(field, ptx, clazzInstance, depth, isRecursiveWithUnsafe)
-                println("SET ${field.name} value of type ${ptx.getResolvedType()} to $newFieldValue")
-            } catch (_: Throwable) {
-                println("CANT SET FIELD ${field.name}")
-            }
+            return clazzInstance.addModification(UtDirectSetFieldModel(clazzInstance, field.fieldId, newFieldValue))
         }
         return clazzInstance
+//        val generator = DataGeneratorSettings.generatorRepository.getOrProduceGenerator(
+//            parameterTypeContextForResolvedType,
+//            0
+//        ) ?: return null
+//        if (isRecursiveWithUnsafe) {
+//            (listOf(generator) + generator.getAllComponents()).forEach {
+//                if (it is UserClassesGenerator) it.generationMethod = GenerationMethod.UNSAFE
+//            }
+//        }
+//        println("I GOT GENERATOR!! $generator")
+//        var newFieldValue: Any? = null
+//        repeat(3) {
+//            try {
+//                if (newFieldValue == null) {
+//                    newFieldValue =
+//                        generator.generate(DataGeneratorSettings.sourceOfRandomness, DataGeneratorSettings.genStatus)
+//                }
+//            } catch (e: Exception) {
+//                return@repeat
+//            }
+//        }
+//        println("NEW VALUE GENERATED!!")
+//        if (newFieldValue != null) {
+//            try {
+//                println("NEW VALUE = ${newFieldValue} CLASS ${newFieldValue!!::class.java}")
+//            } catch (e: Throwable) {
+//                println("NEW VALUE OF CLASS ${newFieldValue!!::class.java} generated")
+//            }
+//        }
+//        if (newFieldValue != null) {
+//            field.setFieldValue(clazzInstance, newFieldValue)
+//        }
+//        return newFieldValue
     }
 
-    fun generateInstanceWithDefaultConstructorOrUnsafe(clazz: Class<*>): Any? {
-        val defaultConstructor = clazz.constructors.find { it.parameterCount == 0 }
-        return if (defaultConstructor != null) {
-            defaultConstructor.newInstance()
-        } else {
-            try {
-                UserClassesGenerator.UNSAFE.allocateInstance(clazz)
-            } catch (e: Throwable) {
-                null
-            }
-        }
-    }
+//    fun generateInstanceWithUnsafe(
+//        clazz: Class<*>,
+//        depth: Int,
+//        isRecursiveWithUnsafe: Boolean,
+//        genericsContext: GenericsContext?
+//    ): UtModel? {
+//        println("TRYING TO GENERATE ${clazz.name} instance")
+//        if (depth >= DataGeneratorSettings.maxDepthOfGeneration) return null
+//        val clazzInstance =
+//            try {
+//                InstancesGenerator.generateInstanceViaConstructor(
+//                    resolvedJavaType.toClass()!!,
+//                    gctx,
+//                    parameterTypeContext!!.getGenericContext(),
+//                    depth
+//                )
+//                val defaultConstructor = clazz.constructors.minByOrNull { it.parameterCount } ?: return null
+//            } catch (e: Exception) {
+//                return null
+//            } catch (e: Error) {
+//                return null
+//            }
+//        clazz.getAllDeclaredFields().forEach { field ->
+//            try {
+//                val ptx = genericsContext?.let { field.buildParameterContext(genericsContext) }
+//                    ?: ParameterTypeContext.forField(field)
+//                val newFieldValue = setNewFieldValue(field, ptx, clazzInstance, depth, isRecursiveWithUnsafe)
+//                println("SET ${field.name} value of type ${ptx.getResolvedType()} to $newFieldValue")
+//            } catch (_: Throwable) {
+//                println("CANT SET FIELD ${field.name}")
+//            }
+//        }
+//        return UtNullModel(classIdForType(clazz))
+//    }
+
+//    fun generateInstanceWithDefaultConstructorOrUnsafe(clazz: Class<*>): Any? {
+//        val defaultConstructor = clazz.constructors.find { it.parameterCount == 0 }
+//        return if (defaultConstructor != null) {
+//            defaultConstructor.newInstance()
+//        } else {
+//            try {
+//                UserClassesGenerator.UNSAFE.allocateInstance(clazz)
+//            } catch (e: Throwable) {
+//                null
+//            }
+//        }
+//    }
 
 }

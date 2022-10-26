@@ -76,7 +76,12 @@ public class LongGenerator extends IntegralGenerator<Long> {
         SourceOfRandomness random,
         GenerationStatus status) {
 
-        return UtModelGenerator.getUtModelConstructor().construct(random.nextLong(min, max), Long.class);
+        return UtModelGenerator.getUtModelConstructor().construct(generateValue(random, status), Long.class);
+    }
+
+    public long generateValue(SourceOfRandomness random,
+                             GenerationStatus status) {
+        return random.nextLong(min, max);
     }
 
     @Override protected Function<BigInteger, Long> narrow() {

@@ -5,6 +5,7 @@ package org.utbot.engine.greyboxfuzzer.generator
 import org.utbot.quickcheck.internal.ParameterTypeContext
 import org.javaruntype.type.Types
 import org.utbot.engine.greyboxfuzzer.util.*
+import org.utbot.framework.plugin.api.UtModel
 import ru.vyarus.java.generics.resolver.context.GenericsContext
 import ru.vyarus.java.generics.resolver.context.GenericsInfo
 import ru.vyarus.java.generics.resolver.context.container.ParameterizedTypeImpl
@@ -20,7 +21,7 @@ object InterfaceImplementersGenerator {
         parameterTypeContext: ParameterTypeContext,
         depth: Int,
         isRecursiveUnsafe: Boolean
-    ): Any? {
+    ): UtModel? {
         //val sootMethod = SootStaticsCollector.getStaticInstancesOf(clazz!!).first()
         val staticGenerators = SootStaticsCollector.getStaticInstancesOf(parameterTypeContext.rawClass!!)
         if (staticGenerators.isNotEmpty() && (Random.nextBoolean() || resolvedType.toClass()
@@ -99,7 +100,7 @@ object InterfaceImplementersGenerator {
         println("TRYING TO GENERATE instance of ${prevImplementer.name}")
         val typeOfGenerations =
             if (isRecursiveUnsafe) mutableListOf('u')
-            else mutableListOf('c', 'c', 's', 'u')
+            else mutableListOf('c', 'c', 's')
         while (true) {
             val randomTypeOfGeneration = typeOfGenerations.randomOrNull() ?: break
             println("TYPE OF GENERATION $randomTypeOfGeneration")
@@ -117,12 +118,13 @@ object InterfaceImplementersGenerator {
                         parameterTypeContext,
                         depth
                     )
-                    else -> InstancesGenerator.generateInstanceWithUnsafe(
-                        prevImplementer,
-                        depth,
-                        isRecursiveUnsafe,
-                        genericsContext
-                    )
+//                    else -> InstancesGenerator.generateInstanceWithUnsafe(
+//                        prevImplementer,
+//                        depth,
+//                        isRecursiveUnsafe,
+//                        genericsContext
+//                    )
+                    else -> null
 //                        if (isRecursiveUnsafe) {
 //                        InstancesGenerator.generateInstanceWithUnsafe(prevImplementer, depth, true, genericsContext)
 //                    } else {

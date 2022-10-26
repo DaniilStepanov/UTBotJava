@@ -61,7 +61,6 @@ object Mutator {
                     resolvedParameterCtx,
                     parameter,
                     index,
-                    modelConstructor,
                     DataGeneratorSettings.sourceOfRandomness,
                     DataGeneratorSettings.genStatus
                 ) to classIdForType(parameter.type)

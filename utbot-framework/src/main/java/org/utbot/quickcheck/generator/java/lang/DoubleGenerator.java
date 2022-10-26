@@ -77,7 +77,12 @@ public class DoubleGenerator extends DecimalGenerator<Double> {
         SourceOfRandomness random,
         GenerationStatus status) {
 
-        return UtModelGenerator.getUtModelConstructor().construct(random.nextDouble(min, max), Double.class);
+        return UtModelGenerator.getUtModelConstructor().construct(generateValue(random, status), Double.class);
+    }
+
+    public double generateValue(SourceOfRandomness random,
+                                GenerationStatus status) {
+        return random.nextDouble(min, max);
     }
 
     @Override protected Function<Double, BigDecimal> widen() {

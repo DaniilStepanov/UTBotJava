@@ -66,7 +66,6 @@ class UtModelConstructor(
     private val compositeModelStrategy: UtCompositeModelStrategy = AlwaysConstructStrategy
 ) : UtModelConstructorInterface {
     private val constructedObjects = IdentityHashMap<Any, UtModel>()
-    private val constructionHistory = IdentityHashMap<Any?, Unit>()
     private var timeout: TimeMark? = null
 
     private var unusedId = 0
