@@ -47,10 +47,15 @@ import soot.jimple.JimpleBody
 import soot.options.Options
 import soot.toolkits.graph.ExceptionalUnitGraph
 import java.io.File
+import java.net.URI
+import java.nio.file.FileSystems
+import java.nio.file.Files
 import java.nio.file.Path
 import java.util.jar.JarInputStream
 import java.util.zip.ZipEntry
+import kotlin.io.path.absolutePathString
 import kotlin.reflect.KClass
+import kotlin.streams.toList
 
 /**
 Convert code to Jimple
@@ -107,26 +112,20 @@ object SootUtils {
             Scene.v().addBasicClass(it, SootClass.BODIES)
         }
     }
+
     private fun loadJavaStdLibClasses() {
-        val libraryClasses = mutableListOf<String>()
-        val jars = File("/usr/lib/jvm/java-8-openjdk/jre/lib/").listFiles()
-            .toList()
-            .filter { it.path.endsWith(".jar") }
-        for (jar in jars) {
-            val inputStream = JarInputStream(jar.inputStream())
-            var entry = inputStream.nextEntry
-            while (entry != null) {
-                if (!entry.isDirectory && entry.name.endsWith(".class")) {
-                    // This ZipEntry represents a class. Now, what class does it represent?
-                    val className: String = entry.name.replace('/', '.') // including ".class"
-                    libraryClasses.add(className)
-                }
-                entry = inputStream.nextEntry
+        val fs = FileSystems.getFileSystem(URI.create("jrt:/"))
+        val javaUtilsClasses = Files.walk(fs.getPath("modules", "java.base", "java/util")).toList()
+        val javaLangClasses = Files.walk(fs.getPath("modules", "java.base", "java/lang")).toList()
+        val classesToLoad =
+            (javaUtilsClasses + javaLangClasses)
+                .filter { it.absolutePathString().endsWith(".class") }
+                .filterNot { it.absolutePathString().contains("$") }
+        classesToLoad
+            .map { it.absolutePathString().removePrefix("/modules/java.base/").replace('/', '.') }
+            .forEach {
+                Scene.v().addBasicClass(it, SootClass.BODIES)
             }
-        }
-        libraryClasses.forEach {
-            Scene.v().addBasicClass(it, SootClass.BODIES)
-        }
     }
 
     val libraryClassesToLoad = mutableListOf<String>()

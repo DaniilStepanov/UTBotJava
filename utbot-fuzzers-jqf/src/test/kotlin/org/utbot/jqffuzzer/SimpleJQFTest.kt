@@ -6,7 +6,7 @@ class SimpleJQFTest {
 
     @Test
     fun fuzzBoyerMoore() {
-        JQFDriver.executeJQF("../utbot-sample/src/main/java/org/utbot/examples/strings/BoyerMoore.java")
+        //JQFDriver.executeJQF("../utbot-sample/src/main/java/org/utbot/examples/strings/BoyerMoore.java")
         return
     }
 }

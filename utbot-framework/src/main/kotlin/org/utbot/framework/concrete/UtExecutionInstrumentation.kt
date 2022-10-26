@@ -182,28 +182,28 @@ object UtExecutionInstrumentation : Instrumentation<UtConcreteExecutionResult> {
                         sortOutException(it)
                     }
 
-                    val stateAfterParametersWithThis = params.map { construct(it.value, it.clazz.id) }
-                    val stateAfterStatics = (staticFields.keys/* + traceHandler.computePutStatics()*/)
-                        .associateWith { fieldId ->
-                            fieldId.jField.run {
-                                val computedValue = withAccessibility { get(null) }
-                                val knownModel = stateBefore.statics[fieldId]
-                                val knownValue = staticFields[fieldId]
-                                if (knownModel != null && knownValue != null && knownValue == computedValue) {
-                                    knownModel
-                                } else {
-                                    construct(computedValue, fieldId.type)
-                                }
-                            }
-                        }
-                    val (stateAfterThis, stateAfterParameters) = if (stateBefore.thisInstance == null) {
-                        null to stateAfterParametersWithThis
-                    } else {
-                        stateAfterParametersWithThis.first() to stateAfterParametersWithThis.drop(1)
-                    }
-                    val stateAfter = EnvironmentModels(stateAfterThis, stateAfterParameters, stateAfterStatics)
+//                    val stateAfterParametersWithThis = params.map { construct(it.value, it.clazz.id) }
+//                    val stateAfterStatics = (staticFields.keys/* + traceHandler.computePutStatics()*/)
+//                        .associateWith { fieldId ->
+//                            fieldId.jField.run {
+//                                val computedValue = withAccessibility { get(null) }
+//                                val knownModel = stateBefore.statics[fieldId]
+//                                val knownValue = staticFields[fieldId]
+//                                if (knownModel != null && knownValue != null && knownValue == computedValue) {
+//                                    knownModel
+//                                } else {
+//                                    construct(computedValue, fieldId.type)
+//                                }
+//                            }
+//                        }
+//                    val (stateAfterThis, stateAfterParameters) = if (stateBefore.thisInstance == null) {
+//                        null to stateAfterParametersWithThis
+//                    } else {
+//                        stateAfterParametersWithThis.first() to stateAfterParametersWithThis.drop(1)
+//                    }
+                   // val stateAfter = EnvironmentModels(stateAfterThis, stateAfterParameters, stateAfterStatics)
                     UtConcreteExecutionResult(
-                        stateAfter,
+                        stateBefore,
                         concreteUtModelResult,
                         traceList.toApiCoverage(
                             traceHandler.processingStorage.getInstructionsCount(

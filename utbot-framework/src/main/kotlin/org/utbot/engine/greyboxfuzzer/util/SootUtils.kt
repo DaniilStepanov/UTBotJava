@@ -56,11 +56,19 @@ fun Class<*>.toSootClass() =
     Scene.v().classes.find { it.name == this.name }
 fun Method.toSootMethod(): SootMethod? {
     val javaClass = this.declaringClass
-    val cl = Scene.v().classes.find { it.name == javaClass.name }!!
+    val cl = javaClass.toSootClass() ?: return null
     println("CL = $cl")
     return cl.methods.find {
         val sig = it.bytecodeSignature.drop(1).dropLast(1).substringAfter("${cl.name}: ")
         this.signature == sig
+    }
+}
+
+fun SootMethod.toJavaMethod(): Method? {
+    val javaCl = this.declaringClass.toJavaClass()
+    val sootCl = this.declaringClass
+    return javaCl.getAllDeclaredMethods().find {
+        it.signature == this.bytecodeSignature.drop(1).dropLast(1).substringAfter("${sootCl.name}: ")
     }
 }
 

@@ -1,7 +1,7 @@
 package org.utbot.jqffuzzer;
 
 
-import com.pholser.junit.quickcheck.generator.Size;
+import org.utbot.quickcheck.generator.Size;
 import edu.berkeley.cs.jqf.fuzz.Fuzz;
 import edu.berkeley.cs.jqf.fuzz.JQF;
 import org.junit.runner.RunWith;

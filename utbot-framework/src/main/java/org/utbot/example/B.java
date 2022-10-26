@@ -2,7 +2,7 @@ package org.utbot.example;
 
 import java.util.ArrayList;
 
-public class B<T> {
+public class B<T extends Number> implements A<T> {
 
     public T a;
     public int b;
@@ -14,4 +14,8 @@ public class B<T> {
         this.c = c;
     }
 
+    @Override
+    public int lol(T a, ArrayList<T> arr) {
+        return 0;
+    }
 }

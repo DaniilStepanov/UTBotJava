@@ -1,7 +1,6 @@
 package org.utbot.engine.greyboxfuzzer.mutator
 
-import com.pholser.junit.quickcheck.random.SourceOfRandomness
-import edu.berkeley.cs.jqf.fuzz.ei.ZestGuidance
+import org.utbot.quickcheck.random.SourceOfRandomness
 import org.utbot.engine.greyboxfuzzer.generator.DataGenerator
 import org.utbot.engine.greyboxfuzzer.generator.DataGeneratorSettings
 import org.utbot.engine.greyboxfuzzer.generator.FParameter
@@ -38,7 +37,7 @@ object Mutator {
         println(fParameter)
         return fParameter
     }
-    fun mutateParameter(
+    suspend fun mutateParameter(
         fParameter: FParameter,
         initialInstance: UtReferenceModel,
         modelConstructor: UtModelConstructor
@@ -69,7 +68,7 @@ object Mutator {
             }.map {
                 if (it.first.value != null) {
                     ZestUtils.setUnserializableFieldsToNull(it.first.value!!)
-                    modelConstructor.construct(it.first.value, it.second)
+                    modelConstructor.constructWithTimeoutOrNull(it.first.value, it.second)?: UtNullModel(it.second)
                 } else {
                     UtNullModel(it.second)
                 }
@@ -89,52 +88,52 @@ object Mutator {
     }
 
 
-    private fun mutateInput(oldData: Any, sourceOfRandomness: SourceOfRandomness): Any {
-        val castedData = oldData as LongArray
-        print("BEFORE = ")
-        castedData.forEach { print("$it ") }
-        println()
-        // Clone this input to create initial version of new child
-        //val newInput = LinearInput(this)
-        val bos = ByteArrayOutputStream();
-        val oos = ObjectOutputStream(bos);
-        oos.writeObject(oldData);
-        oos.flush();
-        val data = bos.toByteArray()
-        val random = java.util.Random()//sourceOfRandomness.toJDKRandom()
-
-        // Stack a bunch of mutations
-        val numMutations = 3//ZestGuidance.Input.sampleGeometric(random, MEAN_MUTATION_COUNT)
-        println("mutations = $numMutations")
-        //newInput.desc += ",havoc:$numMutations"
-        val setToZero = random.nextDouble() < 0.1 // one out of 10 times
-        for (mutation in 1..numMutations) {
-
-            // Select a random offset and size
-            val offset = random.nextInt(data.size)
-            val mutationSize = ZestGuidance.Input.sampleGeometric(random, MEAN_MUTATION_SIZE)
-
-            // desc += String.format(":%d@%d", mutationSize, idx);
-
-            // Mutate a contiguous set of bytes from offset
-            for (i in offset until offset + mutationSize) {
-                // Don't go past end of list
-                if (i >= data.size) {
-                    break
-                }
-
-                // Otherwise, apply a random mutation
-                val mutatedValue = if (setToZero) 0 else random.nextInt(256)
-                data[i] = mutatedValue.toByte()
-            }
-        }
-        val `in` = ByteArrayInputStream(data)
-        val `is` = ObjectInputStream(`in`)
-        val afterMutationData = `is`.readObject() as LongArray
-        print("AFTER = ")
-        afterMutationData.forEach { print("$it ") }
-        println()
-        return data
-    }
+//    private fun mutateInput(oldData: Any, sourceOfRandomness: SourceOfRandomness): Any {
+//        val castedData = oldData as LongArray
+//        print("BEFORE = ")
+//        castedData.forEach { print("$it ") }
+//        println()
+//        // Clone this input to create initial version of new child
+//        //val newInput = LinearInput(this)
+//        val bos = ByteArrayOutputStream();
+//        val oos = ObjectOutputStream(bos);
+//        oos.writeObject(oldData);
+//        oos.flush();
+//        val data = bos.toByteArray()
+//        val random = java.util.Random()//sourceOfRandomness.toJDKRandom()
+//
+//        // Stack a bunch of mutations
+//        val numMutations = 3//ZestGuidance.Input.sampleGeometric(random, MEAN_MUTATION_COUNT)
+//        println("mutations = $numMutations")
+//        //newInput.desc += ",havoc:$numMutations"
+//        val setToZero = random.nextDouble() < 0.1 // one out of 10 times
+//        for (mutation in 1..numMutations) {
+//
+//            // Select a random offset and size
+//            val offset = random.nextInt(data.size)
+//            val mutationSize = ZestGuidance.Input.sampleGeometric(random, MEAN_MUTATION_SIZE)
+//
+//            // desc += String.format(":%d@%d", mutationSize, idx);
+//
+//            // Mutate a contiguous set of bytes from offset
+//            for (i in offset until offset + mutationSize) {
+//                // Don't go past end of list
+//                if (i >= data.size) {
+//                    break
+//                }
+//
+//                // Otherwise, apply a random mutation
+//                val mutatedValue = if (setToZero) 0 else random.nextInt(256)
+//                data[i] = mutatedValue.toByte()
+//            }
+//        }
+//        val `in` = ByteArrayInputStream(data)
+//        val `is` = ObjectInputStream(`in`)
+//        val afterMutationData = `is`.readObject() as LongArray
+//        print("AFTER = ")
+//        afterMutationData.forEach { print("$it ") }
+//        println()
+//        return data
+//    }
 
 }

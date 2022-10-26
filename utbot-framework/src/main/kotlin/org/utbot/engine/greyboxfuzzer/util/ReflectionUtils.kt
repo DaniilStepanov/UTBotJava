@@ -2,13 +2,16 @@
 
 package org.utbot.engine.greyboxfuzzer.util
 
+import org.utbot.quickcheck.internal.ParameterTypeContext
 import org.javaruntype.type.Types
 import org.utbot.engine.greyboxfuzzer.generator.UserClassesGenerator
+import org.utbot.engine.greyboxfuzzer.generator.getGenericContext
 import org.utbot.engine.rawType
 import org.utbot.framework.codegen.model.constructor.tree.isStatic
+import ru.vyarus.java.generics.resolver.context.GenericsContext
+import ru.vyarus.java.generics.resolver.context.GenericsInfo
 import sun.reflect.generics.reflectiveObjects.GenericArrayTypeImpl
 import sun.reflect.generics.reflectiveObjects.ParameterizedTypeImpl
-import sun.reflect.generics.reflectiveObjects.TypeVariableImpl
 import java.lang.reflect.*
 import java.lang.reflect.Array as RArray
 import kotlin.random.Random
@@ -88,6 +91,8 @@ fun Class<*>.getAllSuperClassesAndInterfaces(): List<Class<*>> {
     }
     return res
 }
+
+fun Class<*>.isFunctionalInterface() = annotations.any { it.toString() == "@java.lang.FunctionalInterface()" }
 
 fun Field.getFieldValue(instance: Any?): Any? {
     try {
@@ -272,12 +277,30 @@ object ReflectionUtils {
         return Any::class.java
     }
 
+    fun forJavaReflectTypeSafe(type: Type): org.javaruntype.type.Type<*> {
+        val strType = type.toString()
+        val safeType =
+            if (type is WildcardType) {
+                if ((strType.contains(" super ") && strType.contains("extends")) || strType.contains("extends")) {
+                    type.upperBounds.firstOrNull() ?: Any::class.java.rawType
+                } else if (strType.contains(" super ")) {
+                    type.lowerBounds.firstOrNull() ?: Any::class.java.rawType
+                } else {
+                    Any::class.java.rawType
+                }
+            } else type
+        return Types.forJavaLangReflectType(safeType)
+    }
+
 }
 
 val ParameterizedTypeImpl.actualTypeArgumentsRecursive: List<Type>
     get() {
         val queue = ArrayDeque<Type>()
         val res = mutableListOf<Type>()
+        if (this is TypeVariable<*>) {
+            queue.add(this)
+        }
         this.actualTypeArguments.map { queue.add(it) }
         while (queue.isNotEmpty()) {
             val el = queue.removeFirst()
@@ -289,34 +312,150 @@ val ParameterizedTypeImpl.actualTypeArgumentsRecursive: List<Type>
         return res
     }
 
-fun Parameter.replaceUnresolvedGenericsToRandomTypes() {
-    val allUnresolvedTypesInType = (this.parameterizedType as? ParameterizedTypeImpl)
-        ?.actualTypeArgumentsRecursive
-        ?.filter { it is WildcardType || it is TypeVariable<*> }
-        ?: return
-    val allUnresolvedTypesInAnnotatedType = (this.annotatedType.type as? ParameterizedTypeImpl)
-        ?.actualTypeArgumentsRecursive
-        ?.filter { it is WildcardType || it is TypeVariable<*> }
-        ?: return
-    val allUnresolvedTypes = allUnresolvedTypesInType.zip(allUnresolvedTypesInAnnotatedType)
-    for ((unresolvedType, unresolvedTypeCopy) in allUnresolvedTypes) {
-        val upperBound =
-            if (unresolvedType is WildcardType) {
-                unresolvedType.upperBounds.firstOrNull() ?: continue
-            } else if (unresolvedType is TypeVariable<*>) {
-                unresolvedType.bounds?.firstOrNull() ?: continue
-            } else continue
-        val upperBoundAsSootClass = upperBound.toClass()?.toSootClass() ?: continue
-        val randomChild = upperBoundAsSootClass.children.randomOrNull()?.toJavaClass() ?: continue
-        val upperBoundsFields =
-            if (unresolvedType is WildcardType) {
-                unresolvedType.javaClass.getAllDeclaredFields().find { it.name.contains("upperBounds") }!! to
-                        unresolvedTypeCopy.javaClass.getAllDeclaredFields().find { it.name.contains("upperBounds") }!!
-            } else if (unresolvedType is TypeVariable<*>) {
-                unresolvedType.javaClass.getAllDeclaredFields().find { it.name.contains("bounds") }!! to
-                        unresolvedTypeCopy.javaClass.getAllDeclaredFields().find { it.name.contains("bounds") }!!
-            } else continue
-        upperBoundsFields.first.setFieldValue(unresolvedType, arrayOf(randomChild))
-        upperBoundsFields.second.setFieldValue(unresolvedType, arrayOf(randomChild))
+
+//fun Parameter.replaceUnresolvedGenericsToRandomTypes() {
+//    val allUnresolvedTypesInType = (this.parameterizedType as? ParameterizedTypeImpl)
+//        ?.actualTypeArgumentsRecursive
+//        ?.filter { it is WildcardType || it is TypeVariable<*> }
+//        ?: return
+//    val allUnresolvedTypesInAnnotatedType = (this.annotatedType.type as? ParameterizedTypeImpl)
+//        ?.actualTypeArgumentsRecursive
+//        ?.filter { it is WildcardType || it is TypeVariable<*> }
+//        ?: return
+//    val allUnresolvedTypes = allUnresolvedTypesInType.zip(allUnresolvedTypesInAnnotatedType)
+//    for ((unresolvedType, unresolvedTypeCopy) in allUnresolvedTypes) {
+//        val upperBound =
+//            if (unresolvedType is WildcardType) {
+//                unresolvedType.upperBounds.firstOrNull() ?: continue
+//            } else if (unresolvedType is TypeVariable<*>) {
+//                unresolvedType.bounds?.firstOrNull() ?: continue
+//            } else continue
+//        val upperBoundAsSootClass = upperBound.toClass()?.toSootClass() ?: continue
+//        val randomChild =
+//            upperBoundAsSootClass.children.filterNot { it.name.contains("$") }.randomOrNull()?.toJavaClass() ?: continue
+//        val upperBoundsFields =
+//            if (unresolvedType is WildcardType) {
+//                unresolvedType.javaClass.getAllDeclaredFields().find { it.name.contains("upperBounds") }!! to
+//                        unresolvedTypeCopy.javaClass.getAllDeclaredFields().find { it.name.contains("upperBounds") }!!
+//            } else if (unresolvedType is TypeVariable<*>) {
+//                unresolvedType.javaClass.getAllDeclaredFields().find { it.name.contains("bounds") }!! to
+//                        unresolvedTypeCopy.javaClass.getAllDeclaredFields().find { it.name.contains("bounds") }!!
+//            } else continue
+//        upperBoundsFields.first.setFieldValue(unresolvedType, arrayOf(randomChild))
+//        upperBoundsFields.second.setFieldValue(unresolvedType, arrayOf(randomChild))
+//    }
+//}
+
+fun Method.resolveMethod(
+    parameterTypeContext: ParameterTypeContext,
+    typeArguments: List<Type>
+): Pair<LinkedHashMap<String, Type>, GenericsContext> {
+    val cl = this.declaringClass//parameterTypeContext.getResolvedType().rawClass
+    val resolvedJavaType =
+        parameterTypeContext.getGenericContext().resolveType(parameterTypeContext.type()) as ParameterizedType
+    val gm = LinkedHashMap<String, Type>()
+    typeArguments.zip(resolvedJavaType.actualTypeArguments.toList()).forEach {
+        gm[it.first.typeName] = it.second
     }
+    val m = mutableMapOf(cl to gm)
+    val generics = LinkedHashMap<String, Type>()
+    typeArguments.forEachIndexed { index, typeVariable ->
+        generics[typeVariable.typeName] =
+            (resolvedJavaType as ru.vyarus.java.generics.resolver.context.container.ParameterizedTypeImpl).actualTypeArguments[index]
+    }
+    val gctx = GenericsContext(GenericsInfo(cl, m), cl)
+    gctx.method(this).methodGenericsMap().forEach { (s, type) -> generics.getOrPut(s) { type } }
+    return generics to gctx
+}
+
+fun org.javaruntype.type.Type<*>.convertToPrimitiveIfPossible(): org.javaruntype.type.Type<*> {
+    val possiblePrimitive = when (this.toString()) {
+        "java.lang.Short" -> Short::class.java
+        "java.lang.Byte" -> Byte::class.java
+        "java.lang.Integer" -> Int::class.java
+        "java.lang.Long" -> Long::class.java
+        "java.lang.Float" -> Float::class.java
+        "java.lang.Double" -> Double::class.java
+        "java.lang.Char" -> Char::class.java
+        "java.lang.Boolean" -> Boolean::class.java
+        else -> null
+    }
+    return possiblePrimitive?.let { ReflectionUtils.forJavaReflectTypeSafe(it) } ?: this
+}
+
+class GenericsReplacer {
+
+    private val replacedGenerics = mutableListOf<ReplacedTypeParameter>()
+
+    private data class ReplacedTypeParameter(
+        val type: Type,
+        val typeBound: Type?,
+        val annotatedType: Type,
+        val annotatedTypeBound: Type?
+    )
+
+    fun replaceUnresolvedGenericsToRandomTypes(parameter: Parameter) {
+        if (replacedGenerics.isNotEmpty()) {
+            makeReplacement(replacedGenerics)
+            return
+        }
+        val allUnresolvedTypesInType = (parameter.parameterizedType as? ParameterizedTypeImpl)
+            ?.actualTypeArgumentsRecursive
+            ?.filter { it is WildcardType || it is TypeVariable<*> }
+            ?: return
+        val allUnresolvedTypesInAnnotatedType = (parameter.annotatedType.type as? ParameterizedTypeImpl)
+            ?.actualTypeArgumentsRecursive
+            ?.filter { it is WildcardType || it is TypeVariable<*> }
+            ?: return
+        val allUnresolvedTypes = allUnresolvedTypesInType.zip(allUnresolvedTypesInAnnotatedType)
+        replacedGenerics.addAll(
+            allUnresolvedTypes.map {
+                ReplacedTypeParameter(it.first, getUpperBound(it.first), it.second, getUpperBound(it.second))
+            }
+        )
+        makeReplacement(replacedGenerics)
+    }
+
+    fun revert() {
+        if (replacedGenerics.isEmpty()) return
+        for ((type, upperBound, annotatedType, _) in replacedGenerics) {
+            setUpperBoundTo(type, annotatedType, upperBound?.toClass() ?: Any::class.java)
+        }
+    }
+    private fun makeReplacement(allUnresolvedTypes: List<ReplacedTypeParameter>) {
+        for ((type, upperBound, annotatedType, _) in allUnresolvedTypes) {
+            val upperBoundAsSootClass = upperBound?.toClass()?.toSootClass() ?: continue
+            val newRandomBound =
+                upperBoundAsSootClass.children.filterNot { it.name.contains("$") }.randomOrNull()?.toJavaClass()
+                    ?: continue
+            setUpperBoundTo(type, annotatedType, newRandomBound)
+        }
+    }
+
+    private fun setUpperBoundTo(type: Type, annotatedType: Type, clazz: Class<*>) {
+        val upperBoundsFields =
+            when (type) {
+                is WildcardType -> {
+                    type.javaClass.getAllDeclaredFields().find { it.name.contains("upperBounds") }!! to
+                            annotatedType.javaClass.getAllDeclaredFields()
+                                .find { it.name.contains("upperBounds") }!!
+                }
+                is TypeVariable<*> -> {
+                    type.javaClass.getAllDeclaredFields().find { it.name.contains("bounds") }!! to
+                            annotatedType.javaClass.getAllDeclaredFields().find { it.name.contains("bounds") }!!
+                }
+                else -> return
+            }
+        upperBoundsFields.first.setFieldValue(type, arrayOf(clazz))
+        upperBoundsFields.second.setFieldValue(type, arrayOf(clazz))
+    }
+
+    private fun getUpperBound(unresolvedType: Type): Type? =
+        when (unresolvedType) {
+            is WildcardType -> unresolvedType.upperBounds.firstOrNull()
+            is TypeVariable<*> -> unresolvedType.bounds?.firstOrNull()
+            else -> null
+        }
+
+
 }

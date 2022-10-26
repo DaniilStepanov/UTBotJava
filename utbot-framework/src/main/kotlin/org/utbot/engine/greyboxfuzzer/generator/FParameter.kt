@@ -1,6 +1,6 @@
 package org.utbot.engine.greyboxfuzzer.generator
 
-import com.pholser.junit.quickcheck.generator.Generator
+import org.utbot.quickcheck.generator.Generator
 import org.utbot.external.api.classIdForType
 import org.utbot.framework.plugin.api.ClassId
 import org.utbot.framework.plugin.api.UtModel

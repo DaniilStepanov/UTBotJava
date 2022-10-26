@@ -491,8 +491,8 @@ class UtBotSymbolicEngine(
         }
 
         val isFuzzable = executableId.parameters.all { classId ->
-            classId != Method::class.java.id && // causes the child process crash at invocation
-                    classId != Class::class.java.id  // causes java.lang.IllegalAccessException: java.lang.Class at sun.misc.Unsafe.allocateInstance(Native Method)
+            classId != Method::class.java.id //&& // causes the child process crash at invocation
+                    //classId != Class::class.java.id  // causes java.lang.IllegalAccessException: java.lang.Class at sun.misc.Unsafe.allocateInstance(Native Method)
         }
         if (!isFuzzable) {
             return@flow
@@ -530,7 +530,8 @@ class UtBotSymbolicEngine(
             if (!methodUnderTest.isStatic) {
                 //thisInstance
                 //InstancesGenerator.generateInstanceWithDefaultConstructorOrUnsafe(clazz)
-                InstancesGenerator.generateInstanceWithUnsafe(clazz, 0, true, null) ?: thisInstance
+                //InstancesGenerator.generateInstanceWithUnsafe(clazz, 0, false, null) ?: thisInstance
+                thisInstance
             } else {
                 null
             }
@@ -574,7 +575,7 @@ class UtBotSymbolicEngine(
 
 //        println("THIS INSTANCE = ${myThisInstance?.toString()}")
         try {
-            GreyBoxFuzzer(concreteExecutor, methodUnderTest, listOf(), myThisInstance).fuzz()
+            GreyBoxFuzzer(concreteExecutor, methodUnderTest, listOf(), myThisInstance, fallbackModelProvider).fuzz()
         } catch (e: CancellationException) {
             logger.debug { "Cancelled by timeout" }
         } catch (e: ConcreteExecutionFailureException) {

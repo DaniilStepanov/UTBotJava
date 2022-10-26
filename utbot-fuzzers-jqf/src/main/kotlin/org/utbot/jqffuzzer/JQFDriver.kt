@@ -1,9 +1,9 @@
 package org.utbot.jqffuzzer
 
-import com.pholser.junit.quickcheck.internal.ParameterTypeContext
-import com.pholser.junit.quickcheck.internal.generator.GeneratorRepository
-import com.pholser.junit.quickcheck.internal.generator.ServiceLoaderGeneratorSource
-import com.pholser.junit.quickcheck.random.SourceOfRandomness
+import org.utbot.quickcheck.internal.ParameterTypeContext
+import org.utbot.quickcheck.internal.generator.GeneratorRepository
+import org.utbot.quickcheck.internal.generator.ServiceLoaderGeneratorSource
+import org.utbot.quickcheck.random.SourceOfRandomness
 import edu.berkeley.cs.jqf.fuzz.ei.ZestDriver
 import edu.berkeley.cs.jqf.fuzz.guidance.StreamBackedRandom
 import edu.berkeley.cs.jqf.fuzz.junit.quickcheck.FastSourceOfRandomness

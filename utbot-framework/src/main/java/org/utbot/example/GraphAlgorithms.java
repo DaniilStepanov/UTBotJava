@@ -5,7 +5,11 @@ import java.util.*;
 import java.util.concurrent.ThreadPoolExecutor;
 
 public class GraphAlgorithms<T extends Number> {
+    public GraphAlgorithms(T lol) {
+        this.lol = lol;
+    }
 
+    public T lol;
 //    ArrayList<? extends Double> arr2;
 
     public boolean bfs(Graph graph, int startNodeNumber, int goalNodeNumber) {
@@ -54,16 +58,21 @@ public class GraphAlgorithms<T extends Number> {
     }
 
 
-    public Integer testFunc3(ArrayList<Integer> a) {
-        if (a.get(0) == 0) {
-            if (a.get(1) == 1) {
-                if (a.get(2) == 2) {
-                    return -1;
-                }
-            }
-        }
-        return a.get(a.size() - 1);
+//    public Object testFunc3(ArrayList<A<T>> a) {
+//        if (a.get(0) == null) {
+//            return null;
+//        }
+//        return a.get(a.size() - 1);
+//    }
+
+    public Integer testFunc3(List<Integer> map) {
+        return map.get(0);
     }
+
+    public void lol() {
+    }
+
+
 //    public boolean testFunc3(java.util.concurrent.BlockingQueue<java.lang.Runnable> a) {
 //        for (int i = 0; i < array.size() - 1; i++) {
 //            if (array.get(i).a > array.get(i + 1).a) {

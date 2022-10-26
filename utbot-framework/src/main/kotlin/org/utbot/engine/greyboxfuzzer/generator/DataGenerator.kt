@@ -1,14 +1,16 @@
 package org.utbot.engine.greyboxfuzzer.generator
 
-import com.pholser.junit.quickcheck.generator.ComponentizedGenerator
-import com.pholser.junit.quickcheck.generator.GenerationStatus
-import com.pholser.junit.quickcheck.generator.Generator
-import com.pholser.junit.quickcheck.internal.ParameterTypeContext
-import com.pholser.junit.quickcheck.internal.generator.ZilchGenerator
-import com.pholser.junit.quickcheck.random.SourceOfRandomness
+import org.utbot.quickcheck.generator.ComponentizedGenerator
+import org.utbot.quickcheck.generator.GenerationStatus
+import org.utbot.quickcheck.generator.Generator
+import org.utbot.quickcheck.internal.ParameterTypeContext
+import org.utbot.quickcheck.internal.generator.ZilchGenerator
+import org.utbot.quickcheck.random.SourceOfRandomness
+import kotlinx.coroutines.*
 import org.utbot.engine.greyboxfuzzer.util.*
 import org.utbot.external.api.classIdForType
 import org.utbot.framework.concrete.UtModelConstructor
+import org.utbot.framework.plugin.api.UtModel
 import org.utbot.framework.plugin.api.UtNullModel
 import ru.vyarus.java.generics.resolver.context.container.GenericArrayTypeImpl
 import java.lang.reflect.Field
@@ -16,11 +18,13 @@ import java.lang.reflect.Modifier
 import java.lang.reflect.Parameter
 import java.lang.reflect.ParameterizedType
 import java.lang.reflect.Type
+import java.util.concurrent.TimeoutException
 import kotlin.system.exitProcess
+import kotlin.time.Duration
 
 object DataGenerator {
 
-    val generatorRepository = DataGeneratorSettings.generatorRepository
+    private val generatorRepository = DataGeneratorSettings.generatorRepository
 
     fun generate(
         parameterTypeContext: ParameterTypeContext,
@@ -35,22 +39,22 @@ object DataGenerator {
     }
 
     fun generate(
+        clazz: Class<*>,
+        random: SourceOfRandomness,
+        status: GenerationStatus
+    ) = generatorRepository.getOrProduceGenerator(clazz)?.generate(random, status)
+
+
+    fun generate(
         parameter: Parameter,
         parameterIndex: Int,
         utModelConstructor: UtModelConstructor,
         random: SourceOfRandomness,
         status: GenerationStatus
     ): FParameter {
-        //TODO INPUT RANDOM TYPES INSTEAD OF TYPE PARAMETERS
         val generator =
             generatorRepository.getOrProduceGenerator(parameter, parameterIndex)
                 ?.also { GeneratorConfigurator.configureGenerator(it, 80) }
-//        val t = parameter.type.toClass()!!
-//        val pt = parameter.parameterizedType as ParameterizedTypeImpl
-//        t.typeParameters
-//        val ptx = ParameterTypeContext.forParameter(parameter)
-//        val ptx1 = ptx.getAllParameterTypeContexts()[1]
-//        ptx.getResolvedType()
         return generate(generator, parameter, utModelConstructor, random, status)
     }
 
@@ -63,35 +67,47 @@ object DataGenerator {
     ): FParameter {
         generatorRepository.removeGenerator(Any::class.java)
         val classId = classIdForType(parameter.type)
+        var generatedValue: Any?
+
         repeat(3) {
             println("TRY $it")
-//            try {
-            val genVal = generator?.generate(random, status)
             try {
-                println("GENERATED VALUE OF TYPE ${parameter.parameterizedType} = $genVal")
-            } catch (e: Exception) {
-                println("VALUE GENERATED!")
+                generatedValue = generator?.generate(random, status)
+                if (generatedValue != null) {
+                    ZestUtils.setUnserializableFieldsToNull(generatedValue!!)
+                    try {
+                        println("GENERATED VALUE OF TYPE ${parameter.parameterizedType} = $generatedValue")
+                    } catch (e: Exception) {
+                        println("VALUE GENERATED!")
+                    }
+                    println("OK")
+
+                    val constructedUtModel =
+                        utModelConstructor.constructWithTimeoutOrNull(generatedValue, classId) ?: UtNullModel(classId)
+                    println("UtModel = $constructedUtModel")
+                    val fParam = FParameter(
+                        parameter,
+                        generatedValue,
+                        constructedUtModel,
+                        //utModelConstructor.construct(generatedValue, classIdForType(generatedValue!!.javaClass)),
+                        generator,
+                        emptyList()
+                        //parameter.parameterizedType.getFFieldsForClass(generatedValue!!, 0, null)
+                    )
+                    println("fParam created")
+                    return fParam
+                }
+            } catch (e: Throwable) {
+                println("EXCEPTION WHILE VALUE GENERATION")
+                return@repeat
             }
-            if (genVal != null) {
-                return FParameter(
-                    parameter,
-                    genVal,
-                    utModelConstructor.construct(genVal, classIdForType(genVal.javaClass)),
-                    generator,
-                    //emptyList()
-                    parameter.parameterizedType.getFFieldsForClass(genVal, 0, null)
-                )
-            }
-//            } catch (e: Throwable) {
-//                println("EXCEPTION WHILE GENERATION :( $e")
-//                return@repeat
-//            }
         }
         return FParameter(parameter, null, UtNullModel(classId), generator, classId, listOf())
     }
 
     //TODO Make it work with type parameters
     private fun Type.getFFieldsForClass(value: Any, depth: Int, originalField: Field?): List<FField> {
+        println("GETTING FFIelds from $value")
         createFFieldFromPrimitivesOrBoxedPrimitives(this, value, originalField)?.let { return listOf(it) }
         val parameterizedType = this as? ParameterizedType
         val genericsContext =

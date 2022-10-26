@@ -2,13 +2,14 @@
 
 package org.utbot.engine.greyboxfuzzer.generator
 
-import com.pholser.junit.quickcheck.generator.ComponentizedGenerator
-import com.pholser.junit.quickcheck.generator.Generator
-import com.pholser.junit.quickcheck.internal.ParameterTypeContext
-import com.pholser.junit.quickcheck.internal.generator.GeneratorRepository
+import org.utbot.quickcheck.generator.ComponentizedGenerator
+import org.utbot.quickcheck.generator.Generator
+import org.utbot.quickcheck.internal.ParameterTypeContext
+import org.utbot.quickcheck.internal.generator.GeneratorRepository
 import org.javaruntype.exceptions.TypeValidationException
+import org.javaruntype.type.StandardTypeParameter
 import org.javaruntype.type.Types
-import org.utbot.engine.greyboxfuzzer.util.getAllAncestors
+import org.utbot.engine.greyboxfuzzer.util.ReflectionUtils
 import org.utbot.engine.greyboxfuzzer.util.getAllDeclaredFields
 import org.utbot.engine.greyboxfuzzer.util.toClass
 import org.utbot.engine.rawType
@@ -16,10 +17,7 @@ import ru.vyarus.java.generics.resolver.GenericsResolver
 import ru.vyarus.java.generics.resolver.context.ConstructorGenericsContext
 import ru.vyarus.java.generics.resolver.context.GenericsContext
 import ru.vyarus.java.generics.resolver.context.GenericsInfo
-import ru.vyarus.java.generics.resolver.context.container.GenericArrayTypeImpl
-import soot.Scene
 import sun.reflect.generics.reflectiveObjects.ParameterizedTypeImpl
-import sun.reflect.generics.reflectiveObjects.WildcardTypeImpl
 import java.lang.reflect.*
 
 
@@ -115,7 +113,7 @@ fun Parameter.createParameterTypeContext(parameterIndex: Int): ParameterTypeCont
 
 
 fun GeneratorRepository.getOrProduceGenerator(clazz: Class<*>, depth: Int = 0): Generator<*>? =
-    getOrProduceGenerator(ParameterTypeContext.forClass(clazz), depth)
+    getOrProduceGenerator(createParameterTypeContextForClass(clazz), depth)
 
 
 fun GeneratorRepository.getOrProduceGenerator(resolvedType: Type, depth: Int = 0): Generator<*>? =
@@ -193,7 +191,7 @@ private fun ParameterTypeContext.getAllTypeParameters(): List<Type> {
 
 fun ParameterTypeContext.getAllParameterTypeContexts(): List<ParameterTypeContext> {
     fun ArrayDeque<ParameterTypeContext>.addParameterContext(ctx: ParameterTypeContext) {
-        if (ctx.getResolvedType().name == "com.pholser.junit.quickcheck.internal.Zilch") return
+        if (ctx.getResolvedType().name == "org.utbot.quickcheck.internal.Zilch") return
         add(ctx)
     }
     val res = mutableListOf(this)
@@ -295,6 +293,24 @@ fun createParameterContextForParameter(
         parameterIndex
     )
 }
+fun createParameterTypeContextForClass(clazz: Class<*>): ParameterTypeContext {
+    val generics = GenericsResolver.resolve(clazz)
+    val resolvedGenerics = generics.resolveTypeGenerics(clazz).map { createStandardTypeParameter(Types.forJavaLangReflectType(it)) }
+    val resolvedType = Types.forClass(clazz, *resolvedGenerics.toTypedArray())
+    return createParameterTypeContext(
+        clazz.typeName,
+        FakeAnnotatedTypeFactory.makeFrom(clazz),
+        clazz.typeName,
+        resolvedType,
+        generics
+    )
+}
+
+private fun createStandardTypeParameter(type: org.javaruntype.type.Type<*>): StandardTypeParameter<*> {
+    val constructor = StandardTypeParameter::class.java.declaredConstructors.first()
+    constructor.isAccessible = true
+    return constructor.newInstance(type) as StandardTypeParameter<*>
+}
 
 fun createParameterContextForParameter(
     parameter: Parameter,
@@ -309,7 +325,7 @@ fun createParameterContextForParameter(
         parameter.name,
         parameter.annotatedType,
         declarerName,
-        Types.forJavaLangReflectType(type),
+        ReflectionUtils.forJavaReflectTypeSafe(type),
         generics,
         parameterIndex
     )

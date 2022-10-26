@@ -1,18 +1,18 @@
 package org.utbot.engine.greyboxfuzzer.generator
 
-import com.pholser.junit.quickcheck.generator.Generator
-import com.pholser.junit.quickcheck.internal.ParameterTypeContext
-import com.pholser.junit.quickcheck.internal.generator.GeneratorRepository
-import com.pholser.junit.quickcheck.internal.generator.LambdaGenerator
-import com.pholser.junit.quickcheck.internal.generator.MarkerInterfaceGenerator
-import com.pholser.junit.quickcheck.random.SourceOfRandomness
+import org.utbot.quickcheck.generator.Generator
+import org.utbot.quickcheck.internal.ParameterTypeContext
+import org.utbot.quickcheck.internal.generator.GeneratorRepository
+import org.utbot.quickcheck.internal.generator.LambdaGenerator
+import org.utbot.quickcheck.internal.generator.MarkerInterfaceGenerator
+import org.utbot.quickcheck.random.SourceOfRandomness
 import org.utbot.engine.greyboxfuzzer.util.toClass
 
 class UTGeneratorRepository(random: SourceOfRandomness) : GeneratorRepository(random) {
 
     override fun generatorFor(parameter: ParameterTypeContext): Generator<*>? {
         println("TRYING TO GET GENERATOR FOR ${parameter.getResolvedType()}")
-        if (parameter.getResolvedType().name == "com.pholser.junit.quickcheck.internal.Zilch") return null
+        if (parameter.getResolvedType().name == "org.utbot.quickcheck.internal.Zilch") return null
         val generator = super.generatorFor(parameter)
         if (generator is MarkerInterfaceGenerator<*>) {
             throw IllegalArgumentException(

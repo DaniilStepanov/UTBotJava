@@ -1,6 +1,6 @@
 package org.utbot.engine.greyboxfuzzer.util
 
-import com.pholser.junit.quickcheck.internal.ParameterTypeContext
+import org.utbot.quickcheck.internal.ParameterTypeContext
 import org.javaruntype.type.Types
 import org.utbot.engine.greyboxfuzzer.generator.*
 import org.utbot.framework.concrete.UtModelConstructor

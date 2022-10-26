@@ -19,11 +19,7 @@ object SootStaticsCollector {
                     .filter { !it.toString().contains('$') }
                     .toList()
             }
-            val javaMethods = sootMethods.flatMap { sootMethod ->
-                sootMethod.declaringClass.toJavaClass().methods.filter {
-                    it.isStatic() && it.name == sootMethod.name && it.parameterCount == sootMethod.parameterCount
-                }
-            }
+            val javaMethods = sootMethods.mapNotNull { it.toJavaMethod() }
             classToStaticInstance[clazz] = javaMethods
             return javaMethods
         } catch (e: Throwable) {

@@ -2,6 +2,7 @@ package org.utbot.framework.concrete
 
 import org.utbot.common.asPathToFile
 import org.utbot.common.withAccessibility
+import org.utbot.external.api.classIdForType
 import org.utbot.framework.plugin.api.ClassId
 import org.utbot.framework.plugin.api.FieldId
 import org.utbot.framework.plugin.api.UtArrayModel
@@ -32,6 +33,12 @@ import org.utbot.framework.util.isInaccessibleViaReflection
 import org.utbot.framework.util.valueToClassId
 import java.lang.reflect.Modifier
 import java.util.IdentityHashMap
+import java.util.concurrent.TimeoutException
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.ExperimentalTime
+import kotlin.time.TimeMark
+import kotlin.time.TimeSource
 
 /**
  * Represents common interface for model constructors.
@@ -53,11 +60,14 @@ internal interface UtModelConstructorInterface {
  * @param compositeModelStrategy decides whether we should construct a composite model for a certain value or not.
  * searches in [objectToModelCache] for [UtReferenceModel.id].
  */
+@OptIn(ExperimentalTime::class)
 class UtModelConstructor(
     private val objectToModelCache: IdentityHashMap<Any, UtModel>,
     private val compositeModelStrategy: UtCompositeModelStrategy = AlwaysConstructStrategy
 ) : UtModelConstructorInterface {
     private val constructedObjects = IdentityHashMap<Any, UtModel>()
+    private val constructionHistory = IdentityHashMap<Any?, Unit>()
+    private var timeout: TimeMark? = null
 
     private var unusedId = 0
     private val usedIds = objectToModelCache.values
@@ -76,14 +86,29 @@ class UtModelConstructor(
         return objectToModelCache[value]?.let { (it as? UtReferenceModel)?.id } ?: computeUnusedIdAndUpdate()
     }
 
+    fun constructWithTimeoutOrNull(value: Any?, classId: ClassId, timeout: Duration = 1.seconds): UtModel? {
+        this.timeout = TimeSource.Monotonic.markNow() + timeout
+        return try {
+            construct(value, classId)
+        } catch (e: TimeoutException) {
+            null
+        } finally {
+            this.timeout = null
+        }
+    }
+
+    fun construct(value: Any?, classOfValue: Class<*>): UtModel = construct(value, classIdForType(classOfValue))
     /**
      * Constructs a UtModel from a concrete [value] with a specific [classId]. The result can be a [UtAssembleModel]
      * as well.
      *
      * Handles cache on stateBefore values.
      */
-    override fun construct(value: Any?, classId: ClassId): UtModel =
-        when (value) {
+    override fun construct(value: Any?, classId: ClassId): UtModel {
+        if (timeout?.hasPassedNow() == true) {
+            throw TimeoutException("")
+        }
+        return when (value) {
             null -> UtNullModel(classId)
             is Unit -> UtVoidModel
             is Byte,
@@ -107,6 +132,7 @@ class UtModelConstructor(
             is Class<*> -> constructFromClass(value)
             else -> constructFromAny(value)
         }
+    }
 
     // Q: Is there a way to get rid of duplicated code?
 
