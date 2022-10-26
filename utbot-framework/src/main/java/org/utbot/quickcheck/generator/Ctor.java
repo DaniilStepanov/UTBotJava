@@ -26,7 +26,9 @@
 package org.utbot.quickcheck.generator;
 
 import org.utbot.engine.greyboxfuzzer.util.UtModelGenerator;
-import org.utbot.framework.plugin.api.UtModel;
+import org.utbot.external.api.UtModelFactoryKt;
+import org.utbot.framework.concrete.UtModelConstructor;
+import org.utbot.framework.plugin.api.*;
 import org.utbot.quickcheck.generator.GenerationStatus;
 import org.utbot.quickcheck.generator.Generator;
 import org.utbot.quickcheck.generator.Generators;
@@ -36,8 +38,11 @@ import java.lang.reflect.AnnotatedType;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Parameter;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Collectors;
 
+import static org.utbot.external.api.UtModelFactoryKt.classIdForType;
 import static org.utbot.quickcheck.internal.Reflection.instantiate;
 import static org.utbot.quickcheck.internal.Reflection.singleAccessibleConstructor;
 
@@ -86,8 +91,32 @@ public class Ctor<T> extends Generator<T> {
     @Override public UtModel generate(
         SourceOfRandomness random,
         GenerationStatus status) {
+        final UtModelConstructor modelConstructor = UtModelGenerator.getUtModelConstructor();
 
-        return UtModelGenerator.getUtModelConstructor().construct(instantiate(ctor, arguments(random, status)), ctor.getDeclaringClass());
+        final ClassId classId = classIdForType(ctor.getDeclaringClass());
+        final List<ClassId> argumentTypes = Arrays.stream(ctor.getParameterTypes())
+                .map(UtModelFactoryKt::classIdForType)
+                .collect(Collectors.toList());
+
+        final ExecutableId constructorId = new ConstructorId(classId, argumentTypes);
+
+        final int generatedModelId = modelConstructor.computeUnusedIdAndUpdate();
+        final List<UtStatementModel> instantiationChain = new ArrayList<>();
+
+        final UtAssembleModel generatedModel = new UtAssembleModel(
+                generatedModelId,
+                classId,
+                constructorId.getName() + "#" + generatedModelId,
+                instantiationChain,
+                List.of(),
+                null,
+                null
+        );
+
+        final List<UtModel> args = arguments(random, status);
+        instantiationChain.add(new UtExecutableCallModel(null, constructorId, args, generatedModel));
+
+        return generatedModel;
     }
 
     @Override public void provide(Generators provided) {
@@ -112,16 +141,16 @@ public class Ctor<T> extends Generator<T> {
         return new Ctor<>(ctor);
     }
 
-    private Object[] arguments(
+    private List<UtModel> arguments(
         SourceOfRandomness random,
         GenerationStatus status) {
 
-        Object[] args = new Object[parameters.length];
+        UtModel[] args = new UtModel[parameters.length];
 
         for (int i = 0; i < args.length; ++i) {
             args[i] = parameterGenerators.get(i).generate(random, status);
         }
 
-        return args;
+        return List.of(args);
     }
 }

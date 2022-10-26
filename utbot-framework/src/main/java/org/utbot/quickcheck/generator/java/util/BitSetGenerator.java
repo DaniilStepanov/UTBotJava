@@ -59,7 +59,7 @@ public class BitSetGenerator extends Generator<BitSet> {
             bits.set(i, random.nextBoolean());
         }
 
-        return UtModelGenerator.getUtModelConstructor().construct(bits, BitSetGenerator.class);
+        return UtModelGenerator.getUtModelConstructor().construct(bits, BitSet.class);
     }
 
     @Override public List<BitSet> doShrink(

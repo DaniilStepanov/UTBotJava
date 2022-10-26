@@ -24,6 +24,7 @@
 */
 
 package org.utbot.quickcheck.generator.java.util;
+import org.utbot.engine.greyboxfuzzer.util.UtModelGenerator;
 import org.utbot.framework.plugin.api.UtModel;
 
 import org.utbot.framework.plugin.api.UtNullModel;
@@ -36,6 +37,7 @@ import org.utbot.quickcheck.random.SourceOfRandomness;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.OptionalDouble;
 import java.util.OptionalInt;
 
 import static java.math.BigDecimal.ZERO;
@@ -71,10 +73,11 @@ public class OptionalIntGenerator extends Generator<OptionalInt> {
         GenerationStatus status) {
 
         double trial = random.nextDouble();
-//        return trial < 0.25
-//            ? OptionalInt.empty()
-//            : OptionalInt.of(integers.generate(random, status));
-        return new UtNullModel(classIdForType(OptionalInt.class));
+        final OptionalInt generated = trial < 0.25 ?
+                OptionalInt.empty()
+                : OptionalInt.of(integers.generateValue(random, status));
+
+        return UtModelGenerator.getUtModelConstructor().construct(generated, OptionalInt.class);
     }
 
     @Override public List<OptionalInt> doShrink(

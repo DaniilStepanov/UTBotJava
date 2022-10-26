@@ -49,6 +49,6 @@ public class LocaleGenerator extends Generator<Locale> {
         SourceOfRandomness random,
         GenerationStatus status) {
 
-        return UtModelGenerator.getUtModelConstructor().construct(random.choose(AVAILABLE_LOCALES), LocaleGenerator.class);
+        return UtModelGenerator.getUtModelConstructor().construct(random.choose(AVAILABLE_LOCALES), Locale.class);
     }
 }

@@ -73,11 +73,11 @@ public class OptionalDoubleGenerator extends Generator<OptionalDouble> {
         GenerationStatus status) {
 
         double trial = random.nextDouble();
-//        return trial < 0.25
-//            ? OptionalDouble.empty()
-//            : OptionalDouble.of(doubles.generate(random, status));
-        return new UtNullModel(classIdForType(OptionalDouble.class));
+        final OptionalDouble generated = trial < 0.25 ?
+                OptionalDouble.empty()
+                : OptionalDouble.of(doubles.generateValue(random, status));
 
+        return UtModelGenerator.getUtModelConstructor().construct(generated, OptionalDouble.class);
     }
 
     @Override public List<OptionalDouble> doShrink(

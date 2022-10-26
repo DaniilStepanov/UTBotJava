@@ -24,11 +24,13 @@
 */
 
 package org.utbot.quickcheck.generator.java.util;
-import org.utbot.framework.plugin.api.UtModel;
+import org.utbot.engine.greyboxfuzzer.util.UtModelGenerator;
+import org.utbot.framework.concrete.UtModelConstructor;
+import org.utbot.framework.plugin.api.*;
 
-import org.utbot.framework.plugin.api.UtNullModel;
 import org.utbot.quickcheck.generator.ComponentizedGenerator;
 import org.utbot.quickcheck.generator.GenerationStatus;
+import org.utbot.quickcheck.generator.Generator;
 import org.utbot.quickcheck.random.SourceOfRandomness;
 
 import java.math.BigDecimal;
@@ -39,6 +41,8 @@ import java.util.Optional;
 import static java.math.BigDecimal.ZERO;
 import static java.util.stream.Collectors.toList;
 import static org.utbot.external.api.UtModelFactoryKt.classIdForType;
+import static org.utbot.framework.plugin.api.util.IdUtilKt.getObjectClassId;
+import static org.utbot.framework.plugin.api.util.IdUtilKt.methodId;
 
 /**
  * Produces values of type {@link Optional}.
@@ -53,11 +57,29 @@ public class OptionalGenerator extends ComponentizedGenerator<Optional> {
         GenerationStatus status) {
 
         double trial = random.nextDouble();
-//        return trial < 0.25
-//            ? Optional.empty()
-//            : Optional.of(
-//                componentGenerators().get(0).generate(random, status));
-        return new UtNullModel(classIdForType(Optional.class));
+        if (trial < 0.25) {
+            return UtModelGenerator.getUtModelConstructor().construct(Optional.empty(), Optional.class);
+        }
+
+        final UtModel value = componentGenerators().get(0).generate(random, status);
+
+        final UtModelConstructor modelConstructor = UtModelGenerator.getUtModelConstructor();
+        final ClassId classId = classIdForType(Optional.class);
+        final ExecutableId constructorId = methodId(classId, "of", classId, getObjectClassId());
+
+        final int generatedModelId = modelConstructor.computeUnusedIdAndUpdate();
+        final List<UtStatementModel> instantiationChain = new ArrayList<>();
+        final UtAssembleModel generatedModel = new UtAssembleModel(
+                generatedModelId,
+                classId,
+                constructorId.getName() + "#" + generatedModelId,
+                instantiationChain,
+                List.of(),
+                null,
+                null
+        );
+        instantiationChain.add(new UtExecutableCallModel(null, constructorId, List.of(value), generatedModel));
+        return generatedModel;
     }
 
     @Override public List<Optional> doShrink(

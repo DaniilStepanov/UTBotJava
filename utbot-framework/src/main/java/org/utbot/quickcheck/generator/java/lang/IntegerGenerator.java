@@ -75,7 +75,12 @@ public class IntegerGenerator extends IntegralGenerator<Integer> {
     @Override public UtModel generate(
         SourceOfRandomness random,
         GenerationStatus status) {
-        return UtModelGenerator.getUtModelConstructor().construct(random.nextInt(min, max), Integer.class);
+        return UtModelGenerator.getUtModelConstructor().construct(generateValue(random, status), Integer.class);
+    }
+
+    public int generateValue(SourceOfRandomness random,
+                                GenerationStatus status) {
+        return random.nextInt(min, max);
     }
 
     @Override protected Function<BigInteger, Integer> narrow() {

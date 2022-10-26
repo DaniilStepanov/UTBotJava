@@ -26,14 +26,21 @@
 package org.utbot.quickcheck.generator.java.nio.charset;
 
 import org.utbot.engine.greyboxfuzzer.util.UtModelGenerator;
-import org.utbot.framework.plugin.api.UtModel;
+import org.utbot.framework.concrete.UtModelConstructor;
+import org.utbot.framework.plugin.api.*;
+import org.utbot.framework.plugin.api.util.IdUtilKt;
 import org.utbot.quickcheck.generator.GenerationStatus;
 import org.utbot.quickcheck.generator.Generator;
 import org.utbot.quickcheck.random.SourceOfRandomness;
 
+import java.lang.reflect.Method;
 import java.nio.charset.Charset;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
 
 import static java.nio.charset.Charset.availableCharsets;
+import static org.utbot.external.api.UtModelFactoryKt.classIdForType;
 
 /**
  * Produces values of type {@link Charset}.
@@ -47,7 +54,34 @@ public class CharsetGenerator extends Generator<Charset> {
         SourceOfRandomness random,
         GenerationStatus status) {
 
-        return UtModelGenerator.getUtModelConstructor().construct(Charset.forName(
-            random.choose(availableCharsets().keySet())), Charset.class);
+        final UtModelConstructor modelConstructor = UtModelGenerator.getUtModelConstructor();
+
+        final String charsetName = random.choose(availableCharsets().keySet());
+        final UtModel charsetNameModel = modelConstructor.construct(charsetName, String.class);
+
+        final Method charsetForName;
+        try {
+            charsetForName = Charset.class.getMethod("forName", String.class);
+        } catch (NoSuchMethodException e) {
+            throw new RuntimeException(e);
+        }
+
+        final ClassId charsetClassId = classIdForType(Charset.class);
+        final ExecutableId charsetForNameId = IdUtilKt.getExecutableId(charsetForName);
+
+        final int modelId = modelConstructor.computeUnusedIdAndUpdate();
+        final List<UtStatementModel> instantiationChain = new ArrayList<>();
+        final UtAssembleModel charsetAssembleModel = new UtAssembleModel(
+                modelId,
+                charsetClassId,
+                charsetForNameId.getName() + "#" + modelId,
+                instantiationChain,
+                List.of(),
+                null,
+                null
+        );
+        instantiationChain.add(new UtExecutableCallModel(null, charsetForNameId, List.of(charsetNameModel), charsetAssembleModel));
+
+        return charsetAssembleModel;
     }
 }

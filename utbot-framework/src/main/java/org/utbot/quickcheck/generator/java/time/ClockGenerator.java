@@ -26,16 +26,22 @@
 package org.utbot.quickcheck.generator.java.time;
 
 import org.utbot.engine.greyboxfuzzer.util.UtModelGenerator;
-import org.utbot.framework.plugin.api.UtModel;
+import org.utbot.framework.concrete.UtModelConstructor;
+import org.utbot.framework.plugin.api.*;
+import org.utbot.framework.plugin.api.util.IdUtilKt;
 import org.utbot.quickcheck.generator.GenerationStatus;
 import org.utbot.quickcheck.generator.Generator;
 import org.utbot.quickcheck.generator.InRange;
 import org.utbot.quickcheck.random.SourceOfRandomness;
 
+import java.lang.reflect.Method;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
+import java.util.ArrayList;
+import java.util.List;
 
+import static org.utbot.external.api.UtModelFactoryKt.classIdForType;
 import static org.utbot.quickcheck.internal.Reflection.defaultValueOf;
 
 /**
@@ -86,6 +92,36 @@ public class ClockGenerator extends Generator<Clock> {
             SourceOfRandomness random,
             GenerationStatus status) {
 
-        return UtModelGenerator.getUtModelConstructor().construct(Clock.fixed(random.nextInstant(min, max), UTC_ZONE_ID), Clock.class);
+        final Instant instant = random.nextInstant(min, max);
+        final ZoneId zoneId = UTC_ZONE_ID;
+
+        final Method clockFixed;
+        try {
+            clockFixed = Clock.class.getMethod("fixed", Instant.class, ZoneId.class);
+        } catch (NoSuchMethodException e) {
+            throw new RuntimeException(e);
+        }
+
+        final UtModelConstructor modelConstructor = UtModelGenerator.getUtModelConstructor();
+        final UtModel instantModel = modelConstructor.construct(instant, Instant.class);
+        final UtModel zoneIdModel = modelConstructor.construct(zoneId, ZoneId.class);
+
+        final ClassId classId = classIdForType(Clock.class);
+        final ExecutableId constructorId = IdUtilKt.getExecutableId(clockFixed);
+
+        final int modelId = modelConstructor.computeUnusedIdAndUpdate();
+        final List<UtStatementModel> instantiationChain = new ArrayList<>();
+        final UtAssembleModel charsetAssembleModel = new UtAssembleModel(
+                modelId,
+                classId,
+                constructorId.getName() + "#" + modelId,
+                instantiationChain,
+                List.of(),
+                null,
+                null
+        );
+        instantiationChain.add(new UtExecutableCallModel(null, constructorId, List.of(instantModel, zoneIdModel), charsetAssembleModel));
+
+        return charsetAssembleModel;
     }
 }

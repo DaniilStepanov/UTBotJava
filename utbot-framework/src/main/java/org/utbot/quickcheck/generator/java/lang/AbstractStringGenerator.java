@@ -56,13 +56,16 @@ public abstract class AbstractStringGenerator extends Generator<String> {
     @Override public UtModel generate(
         SourceOfRandomness random,
         GenerationStatus status) {
+        return UtModelGenerator.getUtModelConstructor().construct(generateValue(random, status), String.class);
+    }
 
+    public String generateValue( SourceOfRandomness random,
+                                 GenerationStatus status){
         int[] codePoints = new int[status.size()];
 
         for (int i = 0; i < codePoints.length; ++i)
             codePoints[i] = nextCodePoint(random);
-        String res = new String(codePoints, 0, codePoints.length);
-        return UtModelGenerator.getUtModelConstructor().construct(res, String.class);
+        return new String(codePoints, 0, codePoints.length);
     }
 
     @Override public boolean canShrink(Object larger) {
