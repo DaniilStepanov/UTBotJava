@@ -25,6 +25,10 @@
 
 package org.utbot.quickcheck.internal.generator;
 
+import org.utbot.engine.greyboxfuzzer.util.UtModelGenerator;
+import org.utbot.framework.concrete.UtModelConstructor;
+import org.utbot.framework.plugin.api.ClassId;
+import org.utbot.framework.plugin.api.UtArrayModel;
 import org.utbot.framework.plugin.api.UtModel;
 import org.utbot.framework.plugin.api.UtNullModel;
 import org.utbot.quickcheck.generator.*;
@@ -34,13 +38,13 @@ import org.utbot.quickcheck.random.SourceOfRandomness;
 import java.lang.reflect.AnnotatedType;
 import java.lang.reflect.Array;
 import java.math.BigDecimal;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Iterator;
-import java.util.List;
+import java.util.*;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
+import static java.math.BigDecimal.ZERO;
+import static java.util.stream.Collectors.toList;
+import static java.util.stream.StreamSupport.stream;
 import static org.utbot.external.api.UtModelFactoryKt.classIdForType;
 import static org.utbot.quickcheck.internal.Lists.removeFrom;
 import static org.utbot.quickcheck.internal.Lists.shrinksOfOneItem;
@@ -48,9 +52,6 @@ import static org.utbot.quickcheck.internal.Ranges.Type.INTEGRAL;
 import static org.utbot.quickcheck.internal.Ranges.checkRange;
 import static org.utbot.quickcheck.internal.Reflection.annotatedComponentTypes;
 import static org.utbot.quickcheck.internal.Sequences.halving;
-import static java.math.BigDecimal.ZERO;
-import static java.util.stream.Collectors.toList;
-import static java.util.stream.StreamSupport.stream;
 
 public class ArrayGenerator extends Generator<Object> {
     private final Class<?> componentType;
@@ -93,22 +94,21 @@ public class ArrayGenerator extends Generator<Object> {
         GenerationStatus status) {
 
         int length = length(random, status);
-        Object array = Array.newInstance(componentType, length);
+        final ClassId componentTypeId = classIdForType(componentType);
 
-        Stream<?> items =
-            Stream.generate(() -> component.generate(random, status))
-                .sequential();
-        if (distinct) {
-            items = items.distinct();
-        }
+        final UtModelConstructor modelConstructor = UtModelGenerator.getUtModelConstructor();
+        final int modelId = modelConstructor.computeUnusedIdAndUpdate();
+        final Map<Integer, UtModel> stores = new HashMap<>();
+        final UtModel generatedModel = new UtArrayModel(
+                modelId, classIdForType(Object[].class), length, new UtNullModel(componentTypeId), stores
+        );
 
-        Iterator<?> iterator = items.iterator();
         for (int i = 0; i < length; ++i) {
-            Array.set(array, i, iterator.next());
+            final UtModel item = component.generate(random, status);
+            stores.put(i, item);
         }
 
-        //return array;
-        return new UtNullModel(classIdForType(Array.class));
+        return generatedModel;
     }
 
     @Override public boolean canShrink(Object larger) {
