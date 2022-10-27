@@ -25,6 +25,7 @@
 package org.utbot.quickcheck.internal.generator;
 
 import org.utbot.framework.plugin.api.UtModel;
+import org.utbot.framework.plugin.api.UtNullModel;
 import org.utbot.quickcheck.generator.GenerationStatus;
 import org.utbot.quickcheck.generator.Generator;
 import org.utbot.quickcheck.generator.Generators;
@@ -38,6 +39,7 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 
+import static org.utbot.external.api.UtModelFactoryKt.classIdForType;
 import static org.utbot.quickcheck.internal.Reflection.defaultValueOf;
 
 class NullableGenerator<T> extends Generator<T> {
@@ -56,7 +58,7 @@ class NullableGenerator<T> extends Generator<T> {
         GenerationStatus status) {
 
         return random.nextFloat(0, 1) < probabilityOfNull
-            ? null
+            ? new UtNullModel(classIdForType(types().get(0)))
             : delegate.generate(random, status);
     }
 
