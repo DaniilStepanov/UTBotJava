@@ -6,26 +6,24 @@ import org.utbot.quickcheck.internal.ParameterTypeContext
 import org.javaruntype.type.Types
 import org.utbot.engine.greyboxfuzzer.util.*
 import org.utbot.engine.isPublic
-import org.utbot.engine.rawType
 import org.utbot.external.api.classIdForType
 import org.utbot.framework.plugin.api.*
-import org.utbot.framework.plugin.api.util.executableId
-import org.utbot.framework.plugin.api.util.fieldId
-import org.utbot.framework.plugin.api.util.signature
+import org.utbot.framework.plugin.api.util.*
 import ru.vyarus.java.generics.resolver.context.GenericsContext
-import ru.vyarus.java.generics.resolver.context.GenericsInfo
 import ru.vyarus.java.generics.resolver.util.GenericsUtils
 import soot.Scene
 import sun.reflect.annotation.AnnotatedTypeFactory
 import sun.reflect.annotation.TypeAnnotation
 import sun.reflect.generics.reflectiveObjects.ParameterizedTypeImpl
 import java.lang.reflect.*
+import java.util.*
+import kotlin.collections.LinkedHashMap
 import kotlin.random.Random
 import ru.vyarus.java.generics.resolver.context.container.ParameterizedTypeImpl as GParameterizedTypeImpl
 
 object InstancesGenerator {
 
-    fun generateInstanceViaConstructor(
+    fun generateInstanceUsingConstructor(
         clazz: Class<*>,
         gctx: GenericsContext,
         initGenericContext: GenericsContext,
@@ -43,7 +41,7 @@ object InstancesGenerator {
                     //Avoiding recursion
                     .filter { it.parameterTypes.all { !it.name.contains(clazz.name) } }
                     .chooseRandomConstructor()
-            } catch (e: Error) {
+            } catch (_: Throwable) {
                 null
             }
         val randomConstructor =
@@ -51,7 +49,7 @@ object InstancesGenerator {
                 clazz.declaredConstructors
                     .filter { it.parameterTypes.all { !it.name.contains(clazz.name) } }
                     .toList().chooseRandomConstructor()
-            } catch (e: Error) {
+            } catch (_: Throwable) {
                 null
             }
         val constructor = if (Random.getTrue(75)) randomPublicConstructor ?: randomConstructor else randomConstructor
@@ -69,13 +67,13 @@ object InstancesGenerator {
         val parameterValues = constructor.parameters.withIndex().map { indexedParameter ->
             val parameterContext =
                 createParameterContextForParameter(indexedParameter.value, indexedParameter.index, resolvedConstructor)
-            val generator = DataGeneratorSettings.generatorRepository.getOrProduceGenerator(
+            val generator = GreyBoxFuzzerGenerators.generatorRepository.getOrProduceGenerator(
                 parameterContext,
                 depth
             )
             println("GOT A GENERATOR $generator")
             try {
-                generator?.generate(DataGeneratorSettings.sourceOfRandomness, DataGeneratorSettings.genStatus)
+                generator?.generate(GreyBoxFuzzerGenerators.sourceOfRandomness, GreyBoxFuzzerGenerators.genStatus)
             } catch (e: Exception) {
                 null
             }
@@ -99,14 +97,14 @@ object InstancesGenerator {
     }
 
     //TODO rewrite this
-    fun generateInstanceWithStatics(
+    fun generateInstanceUsingStatics(
         resolvedType: org.javaruntype.type.Type<*>,
         gctx: GenericsContext,
         parameterTypeContext: ParameterTypeContext,
         depth: Int
     ): UtModel? {
         println("VIA STATIC FIELD")
-        if (depth > DataGeneratorSettings.maxDepthOfGeneration) return null
+        if (depth > GreyBoxFuzzerGenerators.maxDepthOfGeneration) return null
         //TODO filter not suitable methods with generics with bad bounds
         //TODO make it work for subtypes
         val resolvedStaticMethods =
@@ -134,10 +132,51 @@ object InstancesGenerator {
                 resolvedStaticMethods.randomOrNull() ?: resolvedStaticFields.randomOrNull()
             } ?: return null
         val fieldValue = when (fieldOrMethodToProvideInstance) {
-            is Field ->
-                fieldOrMethodToProvideInstance.getFieldValue(null)?.let {
-                    UtModelGenerator.utModelConstructor.construct(it, classIdForType(it::class.java))
-                } ?: return null
+            is Field -> with(UtModelGenerator.utModelConstructor){
+                val generatedModelId = computeUnusedIdAndUpdate()
+                val instantiationChain = mutableListOf<UtStatementModel>()
+                val generatedModel = UtAssembleModel(
+                    id = generatedModelId,
+                    classId = classIdForType(fieldOrMethodToProvideInstance.type),
+                    modelName = "xxx_$generatedModelId",
+                    instantiationChain = instantiationChain
+                )
+
+                val fieldModelId = computeUnusedIdAndUpdate()
+                val fieldModel = UtCompositeModel(fieldModelId, Field::class.java.id, isMock = false)
+
+                val classModelId = computeUnusedIdAndUpdate()
+                val classModel = UtCompositeModel(classModelId, Class::class.java.id, isMock = false)
+
+                val classInstanceModel = construct(resolvedType.rawClass, classClassId) as UtReferenceModel
+
+                instantiationChain += UtExecutableCallModel(
+                    instance = null,
+                    executable =  methodId(Objects::class.java.id, "requireNonNull", objectClassId, objectClassId),
+                    params = listOf(classInstanceModel),
+                    returnValue = classModel
+                )
+
+                instantiationChain += UtExecutableCallModel(
+                    classModel,
+                    Class<*>::getField.executableId,
+                    listOf(construct(fieldOrMethodToProvideInstance.name, stringClassId)),
+                    returnValue = fieldModel
+                )
+
+                instantiationChain += UtExecutableCallModel(
+                    fieldModel,
+                    Field::get.executableId,
+                    listOf(UtNullModel(resolvedType.rawClass.id)),
+                    returnValue = generatedModel
+                )
+
+                generatedModel
+
+//                fieldOrMethodToProvideInstance.getFieldValue(null)?.let {
+//                    UtModelGenerator.utModelConstructor.construct(it, classIdForType(it::class.java))
+//                } ?: return null
+            }
             is Method -> {
                 val parameterValues =
                     if (fieldOrMethodToProvideInstance.typeParameters.isNotEmpty()) {
@@ -178,19 +217,19 @@ object InstancesGenerator {
         depth: Int
     ): UtModel? {
         return try {
-            val clazz = method.genericReturnType as? ParameterizedType
-            val actualTypeArguments = clazz?.actualTypeArguments?.toList() ?: emptyList()
+            val methodReturnTypeAsParameterizedType = method.genericReturnType as? ParameterizedType
+            val actualTypeArguments = methodReturnTypeAsParameterizedType?.actualTypeArguments?.toList() ?: emptyList()
             val (generics, gctx) = method.resolveMethod(parameterTypeContext, actualTypeArguments)
             val args = method.parameters.mapIndexed { index, parameter ->
                 val resolvedParameterType = GenericsUtils.resolveTypeVariables(parameter.parameterizedType, generics)
                 createParameterContextForParameter(parameter, index, gctx, resolvedParameterType).let { ptx ->
-                    val generator = DataGeneratorSettings.generatorRepository.getOrProduceGenerator(ptx, depth)
-                    generator?.generate(DataGeneratorSettings.sourceOfRandomness, DataGeneratorSettings.genStatus)
+                    val generator = GreyBoxFuzzerGenerators.generatorRepository.getOrProduceGenerator(ptx, depth)
+                    generator?.generate(GreyBoxFuzzerGenerators.sourceOfRandomness, GreyBoxFuzzerGenerators.genStatus)
                 }
             }
             method.isAccessible = true
             //method.invoke(null, *args.toTypedArray())
-            val clazzAsClass = clazz?.toClass() ?: return null
+            val clazzAsClass = method.genericReturnType.toClass() ?: return null
             UtModelGenerator.utModelConstructor.constructAssembleModelUsingMethodInvocation(
                 clazzAsClass,
                 method.executableId,
@@ -215,7 +254,7 @@ object InstancesGenerator {
         val resolvedTypes =
             methodToImplement.parameters.mapIndexed { index, parameter ->
                 val resolvedParameterType = GenericsUtils.resolveTypeVariables(parameter.parameterizedType, generics)
-                createParameterContextForParameter(parameter, index, gctx, resolvedParameterType).getResolvedType()
+                createParameterContextForParameter(parameter, index, gctx, resolvedParameterType).resolved
             }
         val resolvedReturnType = gctx.method(methodToImplement).resolveReturnType()
         val methodToRef = Scene.v().classes.flatMap { it.methods }
@@ -234,7 +273,7 @@ object InstancesGenerator {
         parameterTypeContext: ParameterTypeContext,
         depth: Int
     ): List<UtModel?> {
-        val parameterType = parameterTypeContext.getGenericContext().resolveType(parameterTypeContext.type())
+        val parameterType = parameterTypeContext.generics.resolveType(parameterTypeContext.type())
         val generics = LinkedHashMap<String, Type>()
         (method.genericReturnType as? ParameterizedTypeImpl)?.actualTypeArguments?.forEachIndexed { index, typeVariable ->
             val actualTypeArg = (parameterType as? GParameterizedTypeImpl)?.actualTypeArguments?.get(index)
@@ -290,7 +329,7 @@ object InstancesGenerator {
                     }
                     else -> return null
                 }
-                createParameterTypeContext(
+                ParameterTypeContext(
                     name,
                     AnnotatedTypeFactory.buildAnnotatedType(
                         finallyResolvedType,
@@ -311,9 +350,9 @@ object InstancesGenerator {
         if (!clazz!!.isPrimitive && setAllObjectsToNull)
             return null
 
-        val generator = DataGeneratorSettings.generatorRepository.getOrProduceGenerator(context, depth)
+        val generator = GreyBoxFuzzerGenerators.generatorRepository.getOrProduceGenerator(context, depth)
         //generator.generate(DataGeneratorSettings.sourceOfRandomness, DataGeneratorSettings.genStatus)
-        return generator?.generate(DataGeneratorSettings.sourceOfRandomness, DataGeneratorSettings.genStatus)
+        return generator?.generate(GreyBoxFuzzerGenerators.sourceOfRandomness, GreyBoxFuzzerGenerators.genStatus)
     }
 
     private fun generateParameterValue(
@@ -360,7 +399,7 @@ object InstancesGenerator {
         val parameterTypeContext = ParameterTypeContext.forClass(clazz)
         var resUtModel = classInstance
         for (field in fieldsToRegenerate) {
-            resUtModel = setNewFieldValue(field, parameterTypeContext, classInstance)
+            resUtModel = setNewFieldValue(field, parameterTypeContext, resUtModel)
         }
         return resUtModel
     }
@@ -373,19 +412,19 @@ object InstancesGenerator {
         field.isAccessible = true
         val oldFieldValue = field.getFieldValue(clazzInstance)
         if (field.hasAtLeastOneOfModifiers(Modifier.STATIC, Modifier.FINAL) && oldFieldValue != null) return clazzInstance
-        val fieldType = parameterTypeContext.getGenericContext().resolveFieldType(field)
+        val fieldType = parameterTypeContext.generics.resolveFieldType(field)
         println("F = $field TYPE = $fieldType OLDVALUE = $oldFieldValue")
-        val parameterTypeContextForResolvedType = createParameterTypeContext(
+        val parameterTypeContextForResolvedType = ParameterTypeContext(
             field.name,
             field.annotatedType,
             field.declaringClass.name,
             Types.forJavaLangReflectType(fieldType),
-            parameterTypeContext.getGenericContext()
+            parameterTypeContext.generics
         )
         val newFieldValue = DataGenerator.generate(
             parameterTypeContextForResolvedType,
-            DataGeneratorSettings.sourceOfRandomness,
-            DataGeneratorSettings.genStatus
+            GreyBoxFuzzerGenerators.sourceOfRandomness,
+            GreyBoxFuzzerGenerators.genStatus
         )
         println("NEW FIELD VALUE = $newFieldValue")
         if (newFieldValue != null) {
@@ -454,7 +493,7 @@ object InstancesGenerator {
 //                val ptx = genericsContext?.let { field.buildParameterContext(genericsContext) }
 //                    ?: ParameterTypeContext.forField(field)
 //                val newFieldValue = setNewFieldValue(field, ptx, clazzInstance, depth, isRecursiveWithUnsafe)
-//                println("SET ${field.name} value of type ${ptx.getResolvedType()} to $newFieldValue")
+//                println("SET ${field.name} value of type ${ptx.resolved} to $newFieldValue")
 //            } catch (_: Throwable) {
 //                println("CANT SET FIELD ${field.name}")
 //            }
