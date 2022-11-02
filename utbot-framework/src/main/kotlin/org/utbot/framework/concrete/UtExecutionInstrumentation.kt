@@ -5,31 +5,12 @@ import org.utbot.common.ThreadBasedExecutor
 import org.utbot.common.withAccessibility
 import org.utbot.framework.UtSettings
 import org.utbot.framework.assemble.AssembleModelGenerator
-import org.utbot.framework.plugin.api.Coverage
-import org.utbot.framework.plugin.api.EnvironmentModels
-import org.utbot.framework.plugin.api.FieldId
-import org.utbot.framework.plugin.api.Instruction
-import org.utbot.framework.plugin.api.TimeoutException
-import org.utbot.framework.plugin.api.UtAssembleModel
-import org.utbot.framework.plugin.api.UtExecutionFailure
-import org.utbot.framework.plugin.api.UtExecutionResult
-import org.utbot.framework.plugin.api.UtExecutionSuccess
-import org.utbot.framework.plugin.api.UtExplicitlyThrownException
-import org.utbot.framework.plugin.api.UtImplicitlyThrownException
-import org.utbot.framework.plugin.api.UtInstrumentation
-import org.utbot.framework.plugin.api.UtMethod
-import org.utbot.framework.plugin.api.UtModel
-import org.utbot.framework.plugin.api.UtNewInstanceInstrumentation
-import org.utbot.framework.plugin.api.UtSandboxFailure
-import org.utbot.framework.plugin.api.UtStaticMethodInstrumentation
-import org.utbot.framework.plugin.api.UtTimeoutException
 import org.utbot.framework.plugin.api.util.UtContext
 import org.utbot.framework.plugin.api.util.jField
 import org.utbot.framework.plugin.api.util.id
 import org.utbot.framework.plugin.api.util.singleExecutableId
 import org.utbot.framework.plugin.api.util.utContext
 import org.utbot.framework.plugin.api.util.withUtContext
-import org.utbot.framework.plugin.api.withReflection
 import org.utbot.framework.util.isInaccessibleViaReflection
 import org.utbot.instrumentation.instrumentation.ArgumentList
 import org.utbot.instrumentation.instrumentation.Instrumentation
@@ -44,6 +25,7 @@ import java.security.ProtectionDomain
 import java.time.LocalDateTime
 import java.util.IdentityHashMap
 import org.objectweb.asm.Type
+import org.utbot.framework.plugin.api.*
 import org.utbot.framework.util.singleValue
 import kotlin.reflect.jvm.javaMethod
 import kotlin.system.exitProcess
@@ -182,28 +164,28 @@ object UtExecutionInstrumentation : Instrumentation<UtConcreteExecutionResult> {
                         sortOutException(it)
                     }
 
-//                    val stateAfterParametersWithThis = params.map { construct(it.value, it.clazz.id) }
-//                    val stateAfterStatics = (staticFields.keys/* + traceHandler.computePutStatics()*/)
-//                        .associateWith { fieldId ->
-//                            fieldId.jField.run {
-//                                val computedValue = withAccessibility { get(null) }
-//                                val knownModel = stateBefore.statics[fieldId]
-//                                val knownValue = staticFields[fieldId]
-//                                if (knownModel != null && knownValue != null && knownValue == computedValue) {
-//                                    knownModel
-//                                } else {
-//                                    construct(computedValue, fieldId.type)
-//                                }
-//                            }
-//                        }
-//                    val (stateAfterThis, stateAfterParameters) = if (stateBefore.thisInstance == null) {
-//                        null to stateAfterParametersWithThis
-//                    } else {
-//                        stateAfterParametersWithThis.first() to stateAfterParametersWithThis.drop(1)
-//                    }
-                   // val stateAfter = EnvironmentModels(stateAfterThis, stateAfterParameters, stateAfterStatics)
+                    val stateAfterParametersWithThis = params.map { construct(it.value, it.clazz.id) }
+                    val stateAfterStatics = (staticFields.keys/* + traceHandler.computePutStatics()*/)
+                        .associateWith { fieldId ->
+                            fieldId.jField.run {
+                                val computedValue = withAccessibility { get(null) }
+                                val knownModel = stateBefore.statics[fieldId]
+                                val knownValue = staticFields[fieldId]
+                                if (knownModel != null && knownValue != null && knownValue == computedValue) {
+                                    knownModel
+                                } else {
+                                    construct(computedValue, fieldId.type)
+                                }
+                            }
+                        }
+                    val (stateAfterThis, stateAfterParameters) = if (stateBefore.thisInstance == null) {
+                        null to stateAfterParametersWithThis
+                    } else {
+                        stateAfterParametersWithThis.first() to stateAfterParametersWithThis.drop(1)
+                    }
+                    val stateAfter = EnvironmentModels(stateAfterThis, stateAfterParameters, stateAfterStatics)
                     UtConcreteExecutionResult(
-                        stateBefore,
+                        stateAfter,
                         concreteUtModelResult,
                         traceList.toApiCoverage(
                             traceHandler.processingStorage.getInstructionsCount(
@@ -295,7 +277,7 @@ object UtExecutionInstrumentation : Instrumentation<UtConcreteExecutionResult> {
 /**
  * Transforms a list of internal [EtInstruction]s to a list of api [Instruction]s.
  */
-private fun List<EtInstruction>.toApiCoverage(instructionsCount: Long? = null): Coverage =
+internal fun List<EtInstruction>.toApiCoverage(instructionsCount: Long? = null): Coverage =
     Coverage(
         map { Instruction(it.className, it.methodSignature, it.line, it.id) },
         instructionsCount

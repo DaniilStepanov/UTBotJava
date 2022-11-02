@@ -70,14 +70,13 @@ class FuzzerExecutor {
         )
 
         val testSets1: List<UtMethodTestSet> = fuzzingTestSets(
-            listOf(
-                methodInfo
-            ),
-            clazz,
-            classpath,
-            dependencyClassPath!!,
-            MockStrategyApi.OTHER_PACKAGES,
-            3000L
+            methodsForAutomaticGeneration = listOf(methodInfo),
+            classUnderTest = clazz,
+            classpath = classpath,
+            dependencyClassPath = dependencyClassPath!!,
+            mockStrategyApi = MockStrategyApi.OTHER_PACKAGES,
+            generationTimeoutInMillis = 3000L,
+            isGreyBoxFuzzing = true
         ) { type: Class<*> ->
             if (Int::class.javaPrimitiveType == type || Int::class.java == type) {
                 return@fuzzingTestSets Arrays.asList<Any>(

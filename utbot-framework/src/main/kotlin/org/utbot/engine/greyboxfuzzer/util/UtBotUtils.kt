@@ -50,40 +50,40 @@ fun UtModelConstructor.constructAssembleModelUsingMethodInvocation(
     return resModel
 }
 
-fun UtModelConstructor.constructModelFromValue(value: Any?, classId: ClassId) =
-    if (value == null) {
-        UtNullModel(classId)
-    } else {
-        try {
-            ZestUtils.setUnserializableFieldsToNull(value)
-            construct(value, classId)
-        } catch (e: Throwable) {
-            UtNullModel(classId)
-        }
-    }
-
-fun UtModelConstructor.constructModelFromValues(list: List<Pair<FParameter?, ClassId>>) =
-    list.map { (value, classId) ->
-        if (value?.value == null) {
-            UtNullModel(classId)
-        } else {
-            try {
-                ZestUtils.setUnserializableFieldsToNull(value.value)
-                construct(value.value, classId)
-            } catch (e: Throwable) {
-                UtNullModel(classId)
-            }
-        }
-    }
+//fun UtModelConstructor.constructModelFromValue(value: Any?, classId: ClassId) =
+//    if (value == null) {
+//        UtNullModel(classId)
+//    } else {
+//        try {
+//            ZestUtils.setUnserializableFieldsToNull(value)
+//            construct(value, classId)
+//        } catch (e: Throwable) {
+//            UtNullModel(classId)
+//        }
+//    }
+//
+//fun UtModelConstructor.constructModelFromValues(list: List<Pair<FParameter?, ClassId>>) =
+//    list.map { (value, classId) ->
+//        if (value?.value == null) {
+//            UtNullModel(classId)
+//        } else {
+//            try {
+//                ZestUtils.setUnserializableFieldsToNull(value.value)
+//                construct(value.value, classId)
+//            } catch (e: Throwable) {
+//                UtNullModel(classId)
+//            }
+//        }
+//    }
 
 fun Parameter.resolveParameterTypeAndBuildParameterContext(
     parameterIndex: Int,
     method: Method
 ): ParameterTypeContext {
     val parameterTypeContext = this.createParameterTypeContext(0)
-    val resolvedOriginalType = parameterTypeContext.getGenericContext().resolveType(parameterTypeContext.type())
-    val genericContext = createGenericsContext(resolvedOriginalType, this.type.toClass()!!)
+    val resolvedOriginalType = parameterTypeContext.generics.resolveType(parameterTypeContext.type())
+    val genericContext = resolvedOriginalType.createGenericsContext(this.type.toClass()!!)
     val resolvedParameterType = genericContext.method(method).resolveParameterType(parameterIndex)
-    val newGenericContext = createGenericsContext(resolvedParameterType, resolvedParameterType.toClass()!!)
+    val newGenericContext = resolvedParameterType.createGenericsContext(resolvedParameterType.toClass()!!)
     return createParameterContextForParameter(this, parameterIndex, newGenericContext, resolvedParameterType)
 }

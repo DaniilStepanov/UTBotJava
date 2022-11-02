@@ -34,6 +34,7 @@ import org.utbot.quickcheck.internal.Comparables;
 import org.utbot.quickcheck.random.SourceOfRandomness;
 
 import java.math.BigDecimal;
+import java.util.Collections;
 import java.util.List;
 
 import static org.utbot.quickcheck.internal.Reflection.defaultValueOf;
@@ -48,7 +49,7 @@ public class CharacterGenerator extends Generator<Character> {
     private char max = (Character) defaultValueOf(InRange.class, "maxChar");
 
     public CharacterGenerator() {
-        super(asList(Character.class, char.class));
+        super(Collections.singletonList(Character.class));
     }
 
     /**

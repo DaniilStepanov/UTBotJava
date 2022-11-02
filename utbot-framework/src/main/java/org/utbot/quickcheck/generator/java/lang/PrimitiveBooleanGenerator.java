@@ -43,21 +43,21 @@ import static java.util.Collections.singletonList;
 /**
  * Produces values of type {@code boolean} or {@link Boolean}.
  */
-public class BooleanGenerator extends Generator<Boolean> {
-    public BooleanGenerator() {
-        super(singletonList(Boolean.class));
+public class PrimitiveBooleanGenerator extends Generator<Boolean> {
+    public PrimitiveBooleanGenerator() {
+        super(singletonList(boolean.class));
     }
 
     @Override public UtModel generate(
-        SourceOfRandomness random,
-        GenerationStatus status) {
+            SourceOfRandomness random,
+            GenerationStatus status) {
 
-        return UtModelGenerator.getUtModelConstructor().construct(random.nextBoolean(), Boolean.class);
+        return UtModelGenerator.getUtModelConstructor().construct(random.nextBoolean(), boolean.class);
     }
 
     @Override public List<Boolean> doShrink(
-        SourceOfRandomness random,
-        Boolean larger) {
+            SourceOfRandomness random,
+            Boolean larger) {
 
         return larger ? singletonList(false) : emptyList();
     }

@@ -7,12 +7,13 @@ import org.utbot.quickcheck.internal.generator.LambdaGenerator
 import org.utbot.quickcheck.internal.generator.MarkerInterfaceGenerator
 import org.utbot.quickcheck.random.SourceOfRandomness
 import org.utbot.engine.greyboxfuzzer.util.toClass
+import org.utbot.engine.logger
 
 class UTGeneratorRepository(random: SourceOfRandomness) : GeneratorRepository(random) {
 
     override fun generatorFor(parameter: ParameterTypeContext): Generator<*>? {
-        println("TRYING TO GET GENERATOR FOR ${parameter.getResolvedType()}")
-        if (parameter.getResolvedType().name == "org.utbot.quickcheck.internal.Zilch") return null
+        logger.debug { "TRYING TO GET GENERATOR FOR ${parameter.resolved}" }
+        if (parameter.resolved.name == "org.utbot.quickcheck.internal.Zilch") return null
         val generator = super.generatorFor(parameter)
         if (generator is MarkerInterfaceGenerator<*>) {
             throw IllegalArgumentException(

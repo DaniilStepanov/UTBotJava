@@ -20,6 +20,7 @@ import org.utbot.engine.Mocker
 import org.utbot.engine.UtBotSymbolicEngine
 import org.utbot.engine.displayName
 import org.utbot.engine.greyboxfuzzer.util.CoverageCollector
+import org.utbot.engine.greyboxfuzzer.util.GreyBoxFuzzingStatisticPrinter
 import org.utbot.framework.TestSelectionStrategyType
 import org.utbot.framework.UtSettings
 import org.utbot.framework.UtSettings.checkSolverTimeoutMillis
@@ -160,8 +161,8 @@ open class TestCaseGenerator(
             runBlockingWithCancellationPredicate(isCanceled) {
                 for ((method, controller) in method2controller) {
                     //TODO REMOVE
-                    //println(method.displayName)
-                    if (!method.displayName.contains("testFunc3")) continue
+//                    println(method.displayName)
+//                    if (!method.displayName.contains("testFunc3")) continue
                     controller.job = launch(currentUtContext) {
                         if (!isActive) return@launch
 
@@ -194,78 +195,42 @@ open class TestCaseGenerator(
 
                 // All jobs are in the method2controller now (paused). execute them with timeout
 
-//                GlobalScope.launch {
-//                    while (isActive) {
-//                        var activeCount = 0
-//                        for ((method, controller) in method2controller) {
-//                            if (!controller.job!!.isActive) continue
-//                            activeCount++
-//
-//                            method2controller.values.forEach { it.paused = true }
-//                            controller.paused = false
-//
-//                            logger.info { "|> Resuming method $method" }
-//                            val startTime = System.currentTimeMillis()
-//                            while (controller.job!!.isActive &&
-//                                (System.currentTimeMillis() - startTime) < executionTimeEstimator.timeslotForOneToplevelMethodTraversalInMillis
-//                            ) {
-//                                updateLifecycle(
-//                                    executionStartInMillis,
-//                                    executionTimeEstimator,
-//                                    method2controller.values,
-//                                    this
-//                                )
-//                                yield()
-//                            }
-//                        }
-//                        if (activeCount == 0) break
-//                    }
-//                }
+                GlobalScope.launch {
+                    logger.debug("test generator global scope lifecycle check started")
+                    while (isActive) {
+                        var activeCount = 0
+                        for ((method, controller) in method2controller) {
+                            if (!controller.job!!.isActive) continue
+                            activeCount++
+
+                            method2controller.values.forEach { it.paused = true }
+                            controller.paused = false
+
+                            logger.info { "|> Resuming method $method" }
+                            val startTime = System.currentTimeMillis()
+                            while (controller.job!!.isActive &&
+                                (System.currentTimeMillis() - startTime) < executionTimeEstimator.timeslotForOneToplevelMethodTraversalInMillis
+                            ) {
+                                updateLifecycle(
+                                    executionStartInMillis,
+                                    executionTimeEstimator,
+                                    method2controller.values,
+                                    this
+                                )
+                                yield()
+                            }
+                        }
+                        if (activeCount == 0) break
+                    }
+                    logger.debug("test generator global scope lifecycle check ended")
+                }
             }
         }
         ConcreteExecutor.defaultPool.close() // TODO: think on appropriate way to close child processes
-//Printing to console
-        val clazz = methods.first().clazz
-        val sootClazz = Scene.v().classes.find { it.name == clazz.jvmName }!!
-        val methodsToLineNumbers = sootClazz.methods.mapNotNull {
-            val sig = it.bytecodeSignature.drop(1).dropLast(1).substringAfter("${clazz.jvmName}: ")
-            val (sootMethod, javaMethod) = it to clazz.java.declaredMethods.find { it.signature == sig }
-            if (javaMethod?.kotlinFunction != null) {
-                javaMethod to sootMethod.activeBody.units
-                    .map { it.javaSourceStartLineNumber }
-                    .filter { it != -1 }
-                    .toSet()
-            } else {
-                null
-            }
+
+        if (UtSettings.useGreyBoxFuzzing) {
+            GreyBoxFuzzingStatisticPrinter.printFuzzingStats(methods)
         }
-        println("OVERALL RESULTS:")
-        println("------------------------------------------")
-        for ((method, lines) in methodsToLineNumbers) {
-            val coveredMethodInstructions = CoverageCollector.coverage
-                .filter { it.methodSignature == method.signature }
-                .map { it.lineNumber }
-                .toSet()
-                .filter { it in lines }
-
-            println("METHOD: ${method.name}")
-            println("COVERED: ${coveredMethodInstructions.size} from ${lines.size} ${coveredMethodInstructions.size.toDouble() / lines.size * 100}%")
-            println("COVERED: ${coveredMethodInstructions.sorted()}")
-            println("NOT COVERED: ${lines.filter { it !in coveredMethodInstructions }.sorted()}")
-            println("------------------")
-        }
-        println("------------------------------------------")
-        val allLinesToCover = methodsToLineNumbers.flatMap { it.second }.toSet()
-        val allLinesToCoverSize = allLinesToCover.size
-        val allCoveredLines = CoverageCollector.coverage
-            .filter { it.className.replace('/', '.') == clazz.jvmName }
-            .map { it.lineNumber }.toSet()
-            .filter { it in allLinesToCover }
-            .size
-        println("FINALLY COVERED $allCoveredLines from $allLinesToCoverSize ${allCoveredLines.toDouble() / allLinesToCoverSize * 100}%")
-        println("------------------------------------------")
-
-
         return methods.map { method ->
             UtMethodTestSet(
                 method,

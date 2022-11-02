@@ -314,7 +314,7 @@ fun ClassId.hasField(fieldId: FieldId): Boolean {
     return findFieldByIdOrNull(fieldId) != null
 }
 
-fun ClassId.defaultValueModel(): UtModel = when (this) {
+public fun ClassId.defaultValueModel(): UtModel = when (this) {
     intClassId -> UtPrimitiveModel(0)
     byteClassId -> UtPrimitiveModel(0.toByte())
     shortClassId -> UtPrimitiveModel(0.toShort())

@@ -227,6 +227,7 @@ object UtTestsDialogProcessor {
                                                         generationTimeout = model.timeout
                                                         isSymbolicEngineEnabled = true
                                                         isFuzzingEnabled = UtSettings.useFuzzing
+                                                        isGreyBoxFuzzingEnabled = UtSettings.useGreyBoxFuzzing
                                                         fuzzingValue = project.service<Settings>().fuzzingValue
                                                     }
                                                 )

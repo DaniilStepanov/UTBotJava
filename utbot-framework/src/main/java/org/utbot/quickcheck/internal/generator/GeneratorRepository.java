@@ -54,6 +54,7 @@ public class GeneratorRepository implements Generators {
                 .collect(toSet()));
 
     private final SourceOfRandomness random;
+
     private final Map<Class<?>, Set<Generator<?>>> generators;
 
     public GeneratorRepository(SourceOfRandomness random) {
@@ -66,6 +67,22 @@ public class GeneratorRepository implements Generators {
 
         this.random = random;
         this.generators = generators;
+    }
+
+    public Map<Class<?>, Set<Generator<?>>> getGenerators() {
+        return generators;
+    }
+
+    public void addUserClassGenerator(Class<?> forClass, Generator<?> source) {
+        generators.put(forClass, Set.of(source));
+    }
+
+    public void removeGenerator(Class<?> forClass) {
+        generators.remove(forClass);
+    }
+
+    public void removeGeneratorForObjectClass() {
+        generators.remove(Object.class);
     }
 
     public GeneratorRepository register(Generator<?> source) {

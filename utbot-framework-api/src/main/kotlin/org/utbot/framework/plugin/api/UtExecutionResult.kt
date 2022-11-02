@@ -1,5 +1,6 @@
 package org.utbot.framework.plugin.api
 
+import org.utbot.framework.plugin.api.util.id
 import java.io.File
 import java.util.LinkedList
 
@@ -11,6 +12,10 @@ data class UtExecutionSuccess(val model: UtModel) : UtExecutionResult() {
 
 sealed class UtExecutionFailure : UtExecutionResult() {
     abstract val exception: Throwable
+}
+
+data class UtExecutionSuccessConcrete(val result: Any?) : UtExecutionResult() {
+    override fun toString() = "$result"
 }
 
 data class UtOverflowFailure(
@@ -90,9 +95,11 @@ inline fun UtExecutionResult.onFailure(action: (exception: Throwable) -> Unit): 
 fun UtExecutionResult.getOrThrow(): UtModel = when (this) {
     is UtExecutionSuccess -> model
     is UtExecutionFailure -> throw exception
+    is UtExecutionSuccessConcrete -> UtNullModel(Any::class.java.id)
 }
 
 fun UtExecutionResult.exceptionOrNull(): Throwable? = when (this) {
     is UtExecutionFailure -> exception
     is UtExecutionSuccess -> null
+    is UtExecutionSuccessConcrete -> null
 }

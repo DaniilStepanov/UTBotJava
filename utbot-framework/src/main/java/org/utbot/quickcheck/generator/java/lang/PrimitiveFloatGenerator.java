@@ -34,6 +34,7 @@ import org.utbot.quickcheck.internal.Comparables;
 import org.utbot.quickcheck.random.SourceOfRandomness;
 
 import java.math.BigDecimal;
+import java.util.Collections;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
@@ -43,12 +44,12 @@ import static java.util.Arrays.asList;
 /**
  * Produces values of type {@code float} or {@link Float}.
  */
-public class FloatGenerator extends DecimalGenerator<Float> {
+public class PrimitiveFloatGenerator extends DecimalGenerator<Float> {
     private float min = (Float) defaultValueOf(InRange.class, "minFloat");
     private float max = (Float) defaultValueOf(InRange.class, "maxFloat");
 
-    public FloatGenerator() {
-        super(asList(Float.class));
+    public PrimitiveFloatGenerator() {
+        super(Collections.singletonList(float.class));
     }
 
     /**
@@ -62,20 +63,20 @@ public class FloatGenerator extends DecimalGenerator<Float> {
      */
     public void configure(InRange range) {
         min =
-            range.min().isEmpty()
-                ? range.minFloat()
-                : Float.parseFloat(range.min());
+                range.min().isEmpty()
+                        ? range.minFloat()
+                        : Float.parseFloat(range.min());
         max =
-            range.max().isEmpty()
-                ? range.maxFloat()
-                : Float.parseFloat(range.max());
+                range.max().isEmpty()
+                        ? range.maxFloat()
+                        : Float.parseFloat(range.max());
     }
 
     @Override public UtModel generate(
-        SourceOfRandomness random,
-        GenerationStatus status) {
+            SourceOfRandomness random,
+            GenerationStatus status) {
 
-        return UtModelGenerator.getUtModelConstructor().construct(random.nextFloat(min, max), Float.class);
+        return UtModelGenerator.getUtModelConstructor().construct(random.nextFloat(min, max), float.class);
     }
 
     @Override protected Function<Float, BigDecimal> widen() {

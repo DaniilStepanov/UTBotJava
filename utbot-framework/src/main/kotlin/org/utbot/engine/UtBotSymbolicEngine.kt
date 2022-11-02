@@ -23,10 +23,6 @@ import org.utbot.common.debug
 import org.utbot.common.workaround
 import org.utbot.engine.MockStrategy.NO_MOCKS
 import org.utbot.engine.greyboxfuzzer.GreyBoxFuzzer
-import org.utbot.engine.greyboxfuzzer.generator.DataGenerator
-import org.utbot.engine.greyboxfuzzer.generator.DataGeneratorSettings
-import org.utbot.engine.greyboxfuzzer.generator.InstancesGenerator
-import org.utbot.engine.greyboxfuzzer.util.ZestUtils
 import org.utbot.engine.pc.UtArraySelectExpression
 import org.utbot.engine.pc.UtBoolExpression
 import org.utbot.engine.pc.UtContextInitializer
@@ -60,20 +56,18 @@ import org.utbot.framework.UtSettings.pathSelectorStepsLimit
 import org.utbot.framework.UtSettings.pathSelectorType
 import org.utbot.framework.UtSettings.processUnknownStatesDuringConcreteExecution
 import org.utbot.framework.UtSettings.useDebugVisualization
-import org.utbot.framework.concrete.UtConcreteExecutionData
-import org.utbot.framework.concrete.UtConcreteExecutionResult
-import org.utbot.framework.concrete.UtExecutionInstrumentation
+import org.utbot.framework.concrete.*
 import org.utbot.framework.plugin.api.*
 import org.utbot.framework.plugin.api.Step
-import org.utbot.framework.plugin.api.util.executableId
-import org.utbot.framework.plugin.api.util.id
-import org.utbot.framework.plugin.api.util.utContext
-import org.utbot.framework.plugin.api.util.description
+import org.utbot.framework.plugin.api.util.*
 import org.utbot.fuzzer.*
+import org.utbot.fuzzer.providers.ObjectModelProvider
 import org.utbot.instrumentation.ConcreteExecutor
 import ru.vyarus.java.generics.resolver.context.GenericsInfoFactory
 import soot.jimple.Stmt
+import soot.tagkit.ParamNamesTag
 import java.lang.reflect.Method
+import kotlin.random.Random
 import kotlin.system.measureTimeMillis
 
 val logger = KotlinLogging.logger {}
@@ -350,141 +344,153 @@ class UtBotSymbolicEngine(
      * @param until is used by fuzzer to cancel all tasks if the current time is over this value
      * @param modelProvider provides model values for a method
      */
-//    fun fuzzing(until: Long = Long.MAX_VALUE, modelProvider: (ModelProvider) -> ModelProvider = { it }) = flow {
-//        val executableId = if (methodUnderTest.isConstructor) {
-//            methodUnderTest.javaConstructor!!.executableId
-//        } else {
-//            methodUnderTest.javaMethod!!.executableId
-//        }
-//
-//        val isFuzzable = executableId.parameters.all { classId ->
-//            classId != Method::class.java.id && // causes the child process crash at invocation
-//                    classId != Class::class.java.id  // causes java.lang.IllegalAccessException: java.lang.Class at sun.misc.Unsafe.allocateInstance(Native Method)
-//        }
-//        if (!isFuzzable) {
-//            return@flow
-//        }
-//
-//        val fallbackModelProvider = FallbackModelProvider(defaultIdGenerator)
-//        val constantValues = collectConstantsForFuzzer(graph)
-//
-//        val random = Random(0)
-//        val thisInstance = when {
-//            methodUnderTest.isStatic -> null
-//            methodUnderTest.isConstructor -> if (
-//                methodUnderTest.clazz.isAbstract ||  // can't instantiate abstract class
-//                methodUnderTest.clazz.java.isEnum    // can't reflectively create enum objects
-//            ) {
-//                return@flow
-//            } else {
-//                null
-//            }
-//            else -> {
-//                ObjectModelProvider(defaultIdGenerator).withFallback(fallbackModelProvider).generate(
-//                    FuzzedMethodDescription("thisInstance", voidClassId, listOf(methodUnderTest.clazz.id), constantValues)
-//                ).take(10).shuffled(random).map { it.value.model }.first().apply {
-//                    if (this is UtNullModel) { // it will definitely fail because of NPE,
-//                        return@flow
-//                    }
-//                }
-//            }
-//        }
-//
-//        val methodUnderTestDescription = FuzzedMethodDescription(executableId, collectConstantsForFuzzer(graph)).apply {
-//            compilableName = if (methodUnderTest.isMethod) executableId.name else null
-//            className = executableId.classId.simpleName
-//            packageName = executableId.classId.packageName
-//            val names = graph.body.method.tags.filterIsInstance<ParamNamesTag>().firstOrNull()?.names
-//            parameterNameMap = { index -> names?.getOrNull(index) }
-//        }
-//        val coveredInstructionTracker = Trie(Instruction::id)
-//        val coveredInstructionValues = linkedMapOf<Trie.Node<Instruction>, List<FuzzedValue>>()
-//        var attempts = 0
-//        val attemptsLimit = UtSettings.fuzzingMaxAttempts
-//        val hasMethodUnderTestParametersToFuzz = executableId.parameters.isNotEmpty()
-//        val fuzzedValues = if (hasMethodUnderTestParametersToFuzz) {
-//            fuzz(methodUnderTestDescription, modelProvider(defaultModelProviders(defaultIdGenerator)))
-//        } else {
-//            // in case a method with no parameters is passed fuzzing tries to fuzz this instance with different constructors, setters and field mutators
-//            val thisMethodDescription = FuzzedMethodDescription("thisInstance", voidClassId, listOf(methodUnderTest.clazz.id), constantValues).apply {
-//                className = executableId.classId.simpleName
-//                packageName = executableId.classId.packageName
-//            }
-//            fuzz(thisMethodDescription, ObjectModelProvider(defaultIdGenerator).apply {
-//                totalLimit = 500
-//            })
-//        }.withMutations(
-//            TrieBasedFuzzerStatistics(coveredInstructionValues), methodUnderTestDescription, *defaultModelMutators().toTypedArray()
-//        )
-//        fuzzedValues.forEach { values ->
-//            if (controller.job?.isActive == false || System.currentTimeMillis() >= until) {
-//                logger.info { "Fuzzing overtime: $methodUnderTest" }
-//                return@flow
-//            }
-//
-//            val initialEnvironmentModels = if (hasMethodUnderTestParametersToFuzz) {
-//                EnvironmentModels(thisInstance, values.map { it.model }, mapOf())
-//            } else {
-//                check(values.size == 1 && values.first().model is UtAssembleModel)
-//                EnvironmentModels(values.first().model, emptyList(), mapOf())
-//            }
-//
-//            val concreteExecutionResult: UtConcreteExecutionResult? = try {
-//                concreteExecutor.executeConcretely(methodUnderTest, initialEnvironmentModels, listOf())
-//            } catch (e: CancellationException) {
-//                logger.debug { "Cancelled by timeout" }; null
-//            } catch (e: ConcreteExecutionFailureException) {
-//                emitFailedConcreteExecutionResult(initialEnvironmentModels, e); null
-//            } catch (e: Throwable) {
-//                emit(UtError("Default concrete execution failed", e)); null
-//            }
-//
-//            // in case an exception occurred from the concrete execution
-//            concreteExecutionResult ?: return@forEach
-//
-//            workaround(REMOVE_ANONYMOUS_CLASSES) {
-//                concreteExecutionResult.result.onSuccess {
-//                    if (it.classId.isAnonymous) {
-//                        logger.debug("Anonymous class found as a concrete result, symbolic one will be returned")
-//                        return@flow
-//                    }
-//                }
-//            }
-//
-//            val coveredInstructions = concreteExecutionResult.coverage.coveredInstructions
-//            if (coveredInstructions.isNotEmpty()) {
-//                val coverageKey = coveredInstructionTracker.add(coveredInstructions)
-//                if (coverageKey.count > 1) {
-//                    if (++attempts >= attemptsLimit) {
-//                        return@flow
-//                    }
-//                    // Update the seeded values sometimes
-//                    // This is necessary because some values cannot do a good values in mutation in any case
-//                    if (random.flipCoin(probability = 50)) {
-//                        coveredInstructionValues[coverageKey] = values
-//                    }
-//                    return@forEach
-//                }
-//                coveredInstructionValues[coverageKey] = values
-//            } else {
-//                logger.error { "Coverage is empty for $methodUnderTest with ${values.map { it.model }}" }
-//            }
-//
-//            emit(
-//                UtFuzzedExecution(
-//                    stateBefore = initialEnvironmentModels,
-//                    stateAfter = concreteExecutionResult.stateAfter,
-//                    result = concreteExecutionResult.result,
-//                    coverage = concreteExecutionResult.coverage,
-//                    fuzzingValues = values,
-//                    fuzzedMethodDescription = methodUnderTestDescription
-//                )
-//            )
-//        }
-//    }
+    fun fuzzing(until: Long = Long.MAX_VALUE, modelProvider: (ModelProvider) -> ModelProvider = { it }) = flow {
+        val executableId = if (methodUnderTest.isConstructor) {
+            methodUnderTest.javaConstructor!!.executableId
+        } else {
+            methodUnderTest.javaMethod!!.executableId
+        }
+
+        val isFuzzable = executableId.parameters.all { classId ->
+            classId != Method::class.java.id && // causes the child process crash at invocation
+                    classId != Class::class.java.id  // causes java.lang.IllegalAccessException: java.lang.Class at sun.misc.Unsafe.allocateInstance(Native Method)
+        }
+        if (!isFuzzable) {
+            return@flow
+        }
+
+        val fallbackModelProvider = FallbackModelProvider(defaultIdGenerator)
+        val constantValues = collectConstantsForFuzzer(graph)
+
+        val random = Random(0)
+        val thisInstance = when {
+            methodUnderTest.isStatic -> null
+            methodUnderTest.isConstructor -> if (
+                methodUnderTest.clazz.isAbstract ||  // can't instantiate abstract class
+                methodUnderTest.clazz.java.isEnum    // can't reflectively create enum objects
+            ) {
+                return@flow
+            } else {
+                null
+            }
+            else -> {
+                ObjectModelProvider(defaultIdGenerator).withFallback(fallbackModelProvider).generate(
+                    FuzzedMethodDescription(
+                        "thisInstance",
+                        voidClassId,
+                        listOf(methodUnderTest.clazz.id),
+                        constantValues
+                    )
+                ).take(10).shuffled(random).map { it.value.model }.first().apply {
+                    if (this is UtNullModel) { // it will definitely fail because of NPE,
+                        return@flow
+                    }
+                }
+            }
+        }
+
+        val methodUnderTestDescription = FuzzedMethodDescription(executableId, collectConstantsForFuzzer(graph)).apply {
+            compilableName = if (methodUnderTest.isMethod) executableId.name else null
+            className = executableId.classId.simpleName
+            packageName = executableId.classId.packageName
+            val names = graph.body.method.tags.filterIsInstance<ParamNamesTag>().firstOrNull()?.names
+            parameterNameMap = { index -> names?.getOrNull(index) }
+        }
+        val coveredInstructionTracker = Trie(Instruction::id)
+        val coveredInstructionValues = linkedMapOf<Trie.Node<Instruction>, List<FuzzedValue>>()
+        var attempts = 0
+        val attemptsLimit = UtSettings.fuzzingMaxAttempts
+        val hasMethodUnderTestParametersToFuzz = executableId.parameters.isNotEmpty()
+        val fuzzedValues = if (hasMethodUnderTestParametersToFuzz) {
+            fuzz(methodUnderTestDescription, modelProvider(defaultModelProviders(defaultIdGenerator)))
+        } else {
+            // in case a method with no parameters is passed fuzzing tries to fuzz this instance with different constructors, setters and field mutators
+            val thisMethodDescription = FuzzedMethodDescription(
+                "thisInstance",
+                voidClassId,
+                listOf(methodUnderTest.clazz.id),
+                constantValues
+            ).apply {
+                className = executableId.classId.simpleName
+                packageName = executableId.classId.packageName
+            }
+            fuzz(thisMethodDescription, ObjectModelProvider(defaultIdGenerator).apply {
+                totalLimit = 500
+            })
+        }.withMutations(
+            TrieBasedFuzzerStatistics(coveredInstructionValues),
+            methodUnderTestDescription,
+            *defaultModelMutators().toTypedArray()
+        )
+        fuzzedValues.forEach { values ->
+            if (controller.job?.isActive == false || System.currentTimeMillis() >= until) {
+                logger.info { "Fuzzing overtime: $methodUnderTest" }
+                return@flow
+            }
+
+            val initialEnvironmentModels = if (hasMethodUnderTestParametersToFuzz) {
+                EnvironmentModels(thisInstance, values.map { it.model }, mapOf())
+            } else {
+                check(values.size == 1 && values.first().model is UtAssembleModel)
+                EnvironmentModels(values.first().model, emptyList(), mapOf())
+            }
+
+            val concreteExecutionResult: UtConcreteExecutionResult? = try {
+                concreteExecutor.executeConcretely(methodUnderTest, initialEnvironmentModels, listOf())
+            } catch (e: CancellationException) {
+                logger.debug { "Cancelled by timeout" }; null
+            } catch (e: ConcreteExecutionFailureException) {
+                emitFailedConcreteExecutionResult(initialEnvironmentModels, e); null
+            } catch (e: Throwable) {
+                emit(UtError("Default concrete execution failed", e)); null
+            }
+
+            // in case an exception occurred from the concrete execution
+            concreteExecutionResult ?: return@forEach
+
+            workaround(REMOVE_ANONYMOUS_CLASSES) {
+                concreteExecutionResult.result.onSuccess {
+                    if (it.classId.isAnonymous) {
+                        logger.debug("Anonymous class found as a concrete result, symbolic one will be returned")
+                        return@flow
+                    }
+                }
+            }
+
+            val coveredInstructions = concreteExecutionResult.coverage.coveredInstructions
+            if (coveredInstructions.isNotEmpty()) {
+                val coverageKey = coveredInstructionTracker.add(coveredInstructions)
+                if (coverageKey.count > 1) {
+                    if (++attempts >= attemptsLimit) {
+                        return@flow
+                    }
+                    // Update the seeded values sometimes
+                    // This is necessary because some values cannot do a good values in mutation in any case
+                    if (random.flipCoin(probability = 50)) {
+                        coveredInstructionValues[coverageKey] = values
+                    }
+                    return@forEach
+                }
+                coveredInstructionValues[coverageKey] = values
+            } else {
+                logger.error { "Coverage is empty for $methodUnderTest with ${values.map { it.model }}" }
+            }
+
+            emit(
+                UtFuzzedExecution(
+                    stateBefore = initialEnvironmentModels,
+                    stateAfter = concreteExecutionResult.stateAfter,
+                    result = concreteExecutionResult.result,
+                    coverage = concreteExecutionResult.coverage,
+                    fuzzingValues = values,
+                    fuzzedMethodDescription = methodUnderTestDescription
+                )
+            )
+        }
+    }
 
     //Simple fuzzing
-    fun fuzzing(until: Long = Long.MAX_VALUE, modelProvider: (ModelProvider) -> ModelProvider = { it }) =
+    fun greyBoxFuzzing(until: Long = Long.MAX_VALUE) =
         flow<UtResult> {
             GenericsInfoFactory.disableCache()
             val executableId = if (methodUnderTest.isConstructor) {
@@ -494,146 +500,19 @@ class UtBotSymbolicEngine(
             }
 
             val isFuzzable = executableId.parameters.all { classId ->
-                classId != Method::class.java.id //&& // causes the child process crash at invocation
-                //classId != Class::class.java.id  // causes java.lang.IllegalAccessException: java.lang.Class at sun.misc.Unsafe.allocateInstance(Native Method)
+                classId != Method::class.java.id // causes the child process crash at invocation
             }
             if (!isFuzzable) {
                 return@flow
             }
-
-            val g = ReferencePreservingIntIdGenerator()
-            val fallbackModelProvider = FallbackModelProvider(g)
-
-            val thisInstance = when {
-                methodUnderTest.isStatic -> null
-                methodUnderTest.isConstructor -> if (
-                    methodUnderTest.clazz.isAbstract ||  // can't instantiate abstract class
-                    methodUnderTest.clazz.java.isEnum    // can't reflectively create enum objects
-                ) {
-                    return@flow
-                } else {
-                    null
-                }
-                else -> {
-                    fallbackModelProvider.toModel(methodUnderTest.clazz).apply {
-                        if (this is UtNullModel) { // it will definitely fail because of NPE,
-                            return@flow
-                        }
-                    }
-                }
-            }
-
-            val methodUnderTestDescription = FuzzedMethodDescription(executableId, collectConstantsForFuzzer(graph))
-            //val modelProviderWithFallback = modelProvider(defaultModelProviders { nextDefaultModelId++ }).withFallback(fallbackModelProvider::toModel)
-            val coveredInstructionTracker = mutableSetOf<Instruction>()
-            //var attempts = UtSettings.fuzzingMaxAttemps
-
-            val clazz = methodUnderTest.clazz.java
-            var myThisInstance =
-                if (!methodUnderTest.isStatic) {
-                    //thisInstance
-                    //InstancesGenerator.generateInstanceWithDefaultConstructorOrUnsafe(clazz)
-                    //InstancesGenerator.generateInstanceWithUnsafe(clazz, 0, false, null) ?: thisInstance
-                    DataGenerator.generate(
-                        clazz,
-                        DataGeneratorSettings.sourceOfRandomness,
-                        DataGeneratorSettings.genStatus
-                    ) ?: thisInstance
-                } else {
-                    thisInstance
-                }
-            println("MY THIS INSTANCE = $myThisInstance")
-//        try {
-//            if (myThisInstance != null) {
-//                if (!ZestUtils.setUnserializableFieldsToNull(myThisInstance)) {
-//                    myThisInstance = thisInstance
-//                }
-//            }
-//        } catch (e: Throwable) {
-//            myThisInstance = thisInstance
-//        }
-//        if (myThisInstance != null && !ZestUtils.setUnserializableFieldsToNull(myThisInstance)) {
-//            myThisInstance = thisInstance
-//        }
-//            if (!methodUnderTest.isStatic) {
-//                InstancesGenerator.generateInstanceWithUnsafe(clazz, 0, true)?.let {
-//                    println()
-//                    UtModelConstructor(IdentityHashMap()).construct(it, classIdForType(clazz))
-//                } ?: thisInstance
-//            } else thisInstance
-//        ThisInstanceGenerator.utModelThisInstance ?: thisInstance
-//        val myThisInstance = thisInstance
-
-
-//        val myThisInstance = run {
-//            val clazz = methodUnderTest.clazz.java
-//            val generator = DataGeneratorSettings.generatorRepository.getOrProduceGenerator(clazz, 0)
-//            generator?.generate(DataGeneratorSettings.sourceOfRandomness, DataGeneratorSettings.genStatus)?.let {
-//                UtModelConstructor(IdentityHashMap()).construct(it, classIdForType(clazz))
-//            }
-//        } ?: thisInstance
-//
-//        val inst = run {
-//            val clazz = methodUnderTest.clazz.java
-//            val generator = DataGeneratorSettings.generatorRepository.getOrProduceGenerator(clazz, 0)
-//            generator?.generate(DataGeneratorSettings.sourceOfRandomness, DataGeneratorSettings.genStatus)
-//        }
-//        println("INST = $inst")
-
-
-//        println("THIS INSTANCE = ${myThisInstance?.toString()}")
             try {
-                GreyBoxFuzzer(concreteExecutor, methodUnderTest, listOf(), myThisInstance!!, fallbackModelProvider).fuzz()
+                GreyBoxFuzzer(concreteExecutor.pathsToUserClasses, concreteExecutor.pathsToDependencyClasses, methodUnderTest).fuzz()
             } catch (e: CancellationException) {
                 logger.debug { "Cancelled by timeout" }
-            } catch (e: ConcreteExecutionFailureException) {
-                emitFailedConcreteExecutionResult(EnvironmentModels(thisInstance, listOf(), mapOf()), e)
             } catch (e: Throwable) {
-                emit(UtError("Default concrete execution failed", e))
+                emit(UtError("Unexpected fuzzing crash", e))
             }
             return@flow
-//        fuzz(methodUnderTestDescription, modelProviderWithFallback).forEachIndexed { index, parameters ->
-//            val initialEnvironmentModels = EnvironmentModels(thisInstance, parameters, mapOf())
-//
-//            try {
-//                val concreteExecutionResult =
-//                    concreteExecutor.executeConcretely(methodUnderTest, initialEnvironmentModels, listOf())
-//
-//                workaround(REMOVE_ANONYMOUS_CLASSES) {
-//                    concreteExecutionResult.result.onSuccess {
-//                        if (it.classId.isAnonymous) {
-//                            logger.debug("Anonymous class found as a concrete result, symbolic one will be returned")
-//                            return@flow
-//                        }
-//                    }
-//                }
-//
-//                if (!coveredInstructionTracker.addAll(concreteExecutionResult.coverage.coveredInstructions)) {
-//                    if (--attempts < 0) {
-//                        return@flow
-//                    }
-//                }
-//
-//                emit(
-//                    UtExecution(
-//                        stateBefore = initialEnvironmentModels,
-//                        stateAfter = concreteExecutionResult.stateAfter,
-//                        result = concreteExecutionResult.result,
-//                        instrumentation = emptyList(),
-//                        path = mutableListOf(),
-//                        fullPath = emptyList(),
-//                        coverage = concreteExecutionResult.coverage,
-//                        testMethodName = if (methodUnderTest.isMethod) "test${methodUnderTest.callable.name.capitalize()}ByFuzzer${index}" else null
-//                    )
-//                )
-//            } catch (e: CancellationException) {
-//                logger.debug { "Cancelled by timeout" }
-//            } catch (e: ConcreteExecutionFailureException) {
-//                emitFailedConcreteExecutionResult(initialEnvironmentModels, e)
-//            } catch (e: Throwable) {
-//                emit(UtError("Default concrete execution failed", e))
-//            }
-//        }
         }
 
     private suspend fun FlowCollector<UtResult>.emitFailedConcreteExecutionResult(

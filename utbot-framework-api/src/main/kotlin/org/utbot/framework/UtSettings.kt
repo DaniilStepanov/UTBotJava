@@ -239,6 +239,11 @@ object UtSettings : AbstractSettings(
     var useFuzzing: Boolean by getBooleanProperty(true)
 
     /**
+     * Set to true to start grey-box fuzzing
+     */
+    var useGreyBoxFuzzing: Boolean by getBooleanProperty(true)
+
+    /**
      * Set the total attempts to improve coverage by fuzzer.
      */
     var fuzzingMaxAttempts: Int by getIntProperty(Int.MAX_VALUE)

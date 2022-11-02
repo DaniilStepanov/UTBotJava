@@ -25,12 +25,15 @@
 
 package org.utbot.quickcheck.internal.generator;
 
+import javassist.bytecode.ByteArray;
+import org.antlr.runtime.misc.IntArray;
 import org.utbot.engine.greyboxfuzzer.util.UtModelGenerator;
 import org.utbot.framework.concrete.UtModelConstructor;
 import org.utbot.framework.plugin.api.ClassId;
 import org.utbot.framework.plugin.api.UtArrayModel;
 import org.utbot.framework.plugin.api.UtModel;
 import org.utbot.framework.plugin.api.UtNullModel;
+import org.utbot.framework.plugin.api.util.IdUtilKt;
 import org.utbot.quickcheck.generator.*;
 import org.utbot.quickcheck.internal.Lists;
 import org.utbot.quickcheck.random.SourceOfRandomness;
@@ -67,6 +70,10 @@ public class ArrayGenerator extends Generator<Object> {
         this.component = component;
     }
 
+    public Generator<?> getComponent() {
+        return component;
+    }
+
     /**
      * Tells this generator to produce values with a length within a specified
      * minimum and/or maximum, inclusive, chosen with uniform distribution.
@@ -100,7 +107,7 @@ public class ArrayGenerator extends Generator<Object> {
         final int modelId = modelConstructor.computeUnusedIdAndUpdate();
         final Map<Integer, UtModel> stores = new HashMap<>();
         final UtModel generatedModel = new UtArrayModel(
-                modelId, classIdForType(Object[].class), length, new UtNullModel(componentTypeId), stores
+                modelId, getClassIdForArrayType(componentType), length, IdUtilKt.defaultValueModel(componentTypeId), stores
         );
 
         for (int i = 0; i < length; ++i) {
@@ -110,7 +117,27 @@ public class ArrayGenerator extends Generator<Object> {
 
         return generatedModel;
     }
-
+    private ClassId getClassIdForArrayType(Class<?> componentType) {
+        if (int.class.equals(componentType)) {
+            return new ClassId("[i", classIdForType(int.class));
+        } else if (boolean.class.equals(componentType)) {
+            return new ClassId("[z", classIdForType(boolean.class));
+        } else if (byte.class.equals(componentType)) {
+            return new ClassId("[b", classIdForType(byte.class));
+        } else if (char.class.equals(componentType)) {
+            return new ClassId("[c", classIdForType(char.class));
+        } else if (double.class.equals(componentType)) {
+            return new ClassId("[d", classIdForType(double.class));
+        } else if (float.class.equals(componentType)) {
+            return new ClassId("[f", classIdForType(float.class));
+        } else if (long.class.equals(componentType)) {
+            return new ClassId("[j", classIdForType(long.class));
+        } else if (short.class.equals(componentType)) {
+            return new ClassId("[s", classIdForType(short.class));
+        } else {
+            return new ClassId("[L", classIdForType(componentType));
+        }
+    }
     @Override public boolean canShrink(Object larger) {
         return larger.getClass().getComponentType() == componentType;
     }

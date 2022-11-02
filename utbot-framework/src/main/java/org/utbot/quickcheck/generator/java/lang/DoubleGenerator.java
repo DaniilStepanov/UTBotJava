@@ -34,6 +34,7 @@ import org.utbot.quickcheck.internal.Comparables;
 import org.utbot.quickcheck.random.SourceOfRandomness;
 
 import java.math.BigDecimal;
+import java.util.Collections;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
@@ -49,7 +50,7 @@ public class DoubleGenerator extends DecimalGenerator<Double> {
     private double max = (Double) defaultValueOf(InRange.class, "maxDouble");
 
     public DoubleGenerator() {
-        super(asList(Double.class, double.class));
+        super(Collections.singletonList(Double.class));
     }
 
     /**

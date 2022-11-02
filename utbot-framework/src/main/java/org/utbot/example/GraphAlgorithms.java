@@ -2,11 +2,29 @@ package org.utbot.example;
 
 import java.util.*;
 
-public class GraphAlgorithms<T extends Number> {
-    public GraphAlgorithms(T lol) {
+public class GraphAlgorithms<T> {
+//    public GraphAlgorithms(T lol) {
+//        this.lol = lol;
+//    }
+
+    private class GraphAlgorithms1<R> {
+        T a;
+        R b;
+        int c;
+
+        GraphAlgorithms1(T a, R b, int c) {
+            this.a = a;
+            this.b = b;
+            this.c = c;
+        }
+    }
+    public static GraphAlgorithms<Integer> GRAPH = new GraphAlgorithms<Integer>(1, null);
+    public GraphAlgorithms(int a, T lol) {
+        this.a = a;
         this.lol = lol;
     }
 
+    int a;
     public T lol;
 //    ArrayList<? extends Double> arr2;
 
@@ -63,23 +81,15 @@ public class GraphAlgorithms<T extends Number> {
 //        return a.get(a.size() - 1);
 //    }
 
-    public Number testFunc3() {
-        if (this.lol instanceof Integer) {
-            return ((Integer) this.lol + 1);
+    public static <R extends Number> int testFunc3(int[] c) {
+        if (c[0] == 0) {
+            if (c[1] == 1) {
+                if (c[2] == 2) {
+                    return 777;
+                }
+            }
         }
-        if (this.lol instanceof Short) {
-            return ((Short) this.lol + 1);
-        }
-        if (this.lol instanceof Long) {
-            return ((Long) this.lol + 1);
-        }
-        if (this.lol instanceof Double) {
-            return ((Double) this.lol + 1);
-        }
-        if (this.lol instanceof Float) {
-            return ((Float) this.lol + 1);
-        }
-        return this.lol;
+        return -1;
     }
 
     public void lol() {

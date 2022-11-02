@@ -42,8 +42,9 @@ import static java.util.Collections.unmodifiableList;
  *
  * @param <T> type of property parameter to apply this generator's values to
  */
-public abstract class ComponentizedGenerator<T> extends org.utbot.quickcheck.generator.Generator<T> {
-    private final List<org.utbot.quickcheck.generator.Generator<?>> components = new ArrayList<>();
+public abstract class ComponentizedGenerator<T> extends Generator<T> {
+
+    private final List<Generator<?>> components = new ArrayList<>();
 
     /**
      * @param type class token for type of property parameter this generator
@@ -113,7 +114,7 @@ public abstract class ComponentizedGenerator<T> extends org.utbot.quickcheck.gen
     /**
      * @return this generator's component generators
      */
-    protected List<Generator<?>> componentGenerators() {
+    public List<Generator<?>> componentGenerators() {
         return unmodifiableList(components);
     }
 }

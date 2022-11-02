@@ -4,16 +4,21 @@ import org.utbot.framework.plugin.api.util.signature
 import soot.Hierarchy
 import soot.Scene
 import soot.SootClass
+import soot.SootField
 import soot.SootMethod
+import soot.jimple.internal.JAssignStmt
+import soot.jimple.internal.JInstanceFieldRef
+import java.lang.reflect.Field
 import java.lang.reflect.Method
 import kotlin.reflect.KFunction
 import kotlin.reflect.jvm.javaMethod
 
-fun SootClass.getImplementersOfWithChain(hierarchy: Hierarchy): List<List<SootClass>>? {
+fun SootClass.getImplementersOfWithChain(): List<List<SootClass>> {
     this.checkLevel(SootClass.HIERARCHY)
     if (!this.isInterface && !this.isAbstract) {
         throw RuntimeException("interfaced needed; got $this")
     }
+    val hierarchy = Hierarchy()
     val res = mutableListOf(mutableListOf(this))
     val queue = ArrayDeque<SootClass>()
     queue.add(this)
@@ -39,9 +44,14 @@ fun SootClass.getImplementersOfWithChain(hierarchy: Hierarchy): List<List<SootCl
     return res
 }
 
-private fun getSubClasses(sootClass: SootClass, hierarchy: Hierarchy) {
-    // hierarchy.getDirectImplementersOf(sootClass).
-}
+fun SootMethod.getClassFieldsUsedByFunc(clazz: Class<*>) =
+    activeBody.units
+        .asSequence()
+        .mapNotNull { it as? JAssignStmt }
+        .map { it.rightBox.value }
+        .mapNotNull { it as? JInstanceFieldRef }
+        .mapNotNull { fieldRef -> clazz.getAllDeclaredFields().find { it.name == fieldRef.field.name } }
+        .toSet()
 
 fun SootClass.toJavaClass(): Class<*> =
     try {
@@ -55,22 +65,23 @@ fun KFunction<*>.toSootMethod(): SootMethod? = this.javaMethod?.toSootMethod()
 fun Class<*>.toSootClass() =
     Scene.v().classes.find { it.name == this.name }
 fun Method.toSootMethod(): SootMethod? {
-    val javaClass = this.declaringClass
-    val cl = javaClass.toSootClass() ?: return null
-    println("CL = $cl")
+    val cl = declaringClass.toSootClass() ?: return null
     return cl.methods.find {
         val sig = it.bytecodeSignature.drop(1).dropLast(1).substringAfter("${cl.name}: ")
         this.signature == sig
     }
 }
 
-fun SootMethod.toJavaMethod(): Method? {
-    val javaCl = this.declaringClass.toJavaClass()
-    val sootCl = this.declaringClass
-    return javaCl.getAllDeclaredMethods().find {
-        it.signature == this.bytecodeSignature.drop(1).dropLast(1).substringAfter("${sootCl.name}: ")
+fun SootMethod.toJavaMethod(): Method? =
+    declaringClass.toJavaClass().getAllDeclaredMethods().find {
+        it.signature == this.bytecodeSignature.drop(1).dropLast(1).substringAfter("${declaringClass.name}: ")
     }
-}
+
+fun SootField.toJavaField(): Field? =
+    declaringClass.toJavaClass().getAllDeclaredFields().find { it.name == name }
+
+fun Field.toSootField(): SootField? =
+    declaringClass.toSootClass()?.fields?.find { it.name == name }
 
 fun SootClass.getAllAncestors(): List<SootClass> {
     val queue = ArrayDeque<SootClass>()
@@ -100,18 +111,38 @@ val SootClass.superclassOrNull
             null
         }
 
+//TODO add stuff with generics
+object SootStaticsCollector {
 
-//fun getImplementersOf(i: SootClass): List<SootClass>? {
-//    i.checkLevel(SootClass.HIERARCHY)
-//    if (!i.isInterface) {
-//        throw RuntimeException("interface needed; got $i")
-//    }
-//    checkState()
-//    val set = ArraySet<SootClass>()
-//    for (c in getSubinterfacesOfIncluding(i)) {
-//        set.addAll(getDirectImplementersOf(c))
-//    }
-//    val l = ArrayList<SootClass>()
-//    l.addAll(set)
-//    return Collections.unmodifiableList(l)
-//}
+    private val classToStaticMethodsInstanceProviders = mutableMapOf<Class<*>, List<Method>>()
+    private val classToStaticFieldsInstanceProviders = mutableMapOf<Class<*>, List<Field>>()
+    fun getStaticMethodsInitializersOf(clazz: Class<*>): List<Method> {
+        if (classToStaticMethodsInstanceProviders.contains(clazz)) return classToStaticMethodsInstanceProviders[clazz]!!
+        val classes = Scene.v().classes.filter { !it.name.contains("$") }
+        val sootMethodsToProvideInstance = classes.flatMap {
+            it.methods
+                .asSequence()
+                .filter { it.isStatic && it.returnType.toString() == clazz.name }
+                .filter { it.parameterTypes.all { !it.toString().contains(clazz.name) } }
+                .filter { !it.toString().contains('$') }
+                .toList()
+        }
+        val javaMethodsToProvideInstance = sootMethodsToProvideInstance.mapNotNull { it.toJavaMethod() }
+        classToStaticMethodsInstanceProviders[clazz] = javaMethodsToProvideInstance
+        return javaMethodsToProvideInstance
+    }
+
+    fun getStaticFieldsInitializersOf(clazz: Class<*>): List<Field> {
+        if (classToStaticFieldsInstanceProviders.contains(clazz)) return classToStaticFieldsInstanceProviders[clazz]!!
+        val classes = Scene.v().classes.filter { !it.name.contains("$") }
+        val sootFieldsToProvideInstance = classes.flatMap {
+            it.fields
+                .asSequence()
+                .filter { it.isStatic && it.type.toString() == clazz.name }
+                .toList()
+        }
+        val javaFieldsToProvideInstance = sootFieldsToProvideInstance.mapNotNull { it.toJavaField() }
+        classToStaticFieldsInstanceProviders[clazz] = javaFieldsToProvideInstance
+        return javaFieldsToProvideInstance
+    }
+}

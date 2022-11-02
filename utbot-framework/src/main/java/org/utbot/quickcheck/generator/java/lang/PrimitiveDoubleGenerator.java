@@ -34,6 +34,7 @@ import org.utbot.quickcheck.internal.Comparables;
 import org.utbot.quickcheck.random.SourceOfRandomness;
 
 import java.math.BigDecimal;
+import java.util.Collections;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
@@ -41,14 +42,15 @@ import static org.utbot.quickcheck.internal.Reflection.defaultValueOf;
 import static java.util.Arrays.asList;
 
 /**
- * Produces values of type {@code float} or {@link Float}.
+ * Produces values for property parameters of type {@code double} or
+ * {@link Double}.
  */
-public class FloatGenerator extends DecimalGenerator<Float> {
-    private float min = (Float) defaultValueOf(InRange.class, "minFloat");
-    private float max = (Float) defaultValueOf(InRange.class, "maxFloat");
+public class PrimitiveDoubleGenerator extends DecimalGenerator<Double> {
+    private double min = (Double) defaultValueOf(InRange.class, "minDouble");
+    private double max = (Double) defaultValueOf(InRange.class, "maxDouble");
 
-    public FloatGenerator() {
-        super(asList(Float.class));
+    public PrimitiveDoubleGenerator() {
+        super(Collections.singletonList(double.class));
     }
 
     /**
@@ -56,49 +58,55 @@ public class FloatGenerator extends DecimalGenerator<Float> {
      * (inclusive) and/or maximum (exclusive) with uniform distribution.
      *
      * {@link InRange#min} and {@link InRange#max} take precedence over
-     * {@link InRange#minFloat()} and {@link InRange#maxFloat()}, if non-empty.
+     * {@link InRange#minDouble()} and {@link InRange#maxDouble()},
+     * if non-empty.
      *
      * @param range annotation that gives the range's constraints
      */
     public void configure(InRange range) {
         min =
-            range.min().isEmpty()
-                ? range.minFloat()
-                : Float.parseFloat(range.min());
+                range.min().isEmpty()
+                        ? range.minDouble()
+                        : Double.parseDouble(range.min());
         max =
-            range.max().isEmpty()
-                ? range.maxFloat()
-                : Float.parseFloat(range.max());
+                range.max().isEmpty()
+                        ? range.maxDouble()
+                        : Double.parseDouble(range.max());
     }
 
     @Override public UtModel generate(
-        SourceOfRandomness random,
-        GenerationStatus status) {
+            SourceOfRandomness random,
+            GenerationStatus status) {
 
-        return UtModelGenerator.getUtModelConstructor().construct(random.nextFloat(min, max), Float.class);
+        return UtModelGenerator.getUtModelConstructor().construct(generateValue(random, status), double.class);
     }
 
-    @Override protected Function<Float, BigDecimal> widen() {
+    public double generateValue(SourceOfRandomness random,
+                                GenerationStatus status) {
+        return random.nextDouble(min, max);
+    }
+
+    @Override protected Function<Double, BigDecimal> widen() {
         return BigDecimal::valueOf;
     }
 
-    @Override protected Function<BigDecimal, Float> narrow() {
-        return BigDecimal::floatValue;
+    @Override protected Function<BigDecimal, Double> narrow() {
+        return BigDecimal::doubleValue;
     }
 
-    @Override protected Predicate<Float> inRange() {
+    @Override protected Predicate<Double> inRange() {
         return Comparables.inRange(min, max);
     }
 
-    @Override protected Float leastMagnitude() {
-        return Comparables.leastMagnitude(min, max, 0F);
+    @Override protected Double leastMagnitude() {
+        return Comparables.leastMagnitude(min, max, 0D);
     }
 
-    @Override protected boolean negative(Float target) {
+    @Override protected boolean negative(Double target) {
         return target < 0;
     }
 
-    @Override protected Float negate(Float target) {
+    @Override protected Double negate(Double target) {
         return -target;
     }
 

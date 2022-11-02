@@ -1,16 +1,6 @@
 package org.utbot.summary
 
-import org.utbot.framework.plugin.api.Step
-import org.utbot.framework.plugin.api.UtConcreteExecutionFailure
-import org.utbot.framework.plugin.api.UtSymbolicExecution
-import org.utbot.framework.plugin.api.UtExecutionResult
-import org.utbot.framework.plugin.api.UtExecutionSuccess
-import org.utbot.framework.plugin.api.UtExplicitlyThrownException
-import org.utbot.framework.plugin.api.UtImplicitlyThrownException
-import org.utbot.framework.plugin.api.UtOverflowFailure
-import org.utbot.framework.plugin.api.UtMethodTestSet
-import org.utbot.framework.plugin.api.UtSandboxFailure
-import org.utbot.framework.plugin.api.UtTimeoutException
+import org.utbot.framework.plugin.api.*
 import org.utbot.framework.plugin.api.util.isCheckedException
 import org.utbot.summary.UtSummarySettings.MIN_NUMBER_OF_EXECUTIONS_FOR_CLUSTERING
 import org.utbot.summary.clustering.MatrixUniqueness
@@ -149,6 +139,7 @@ enum class ClusterKind {
 
 private fun UtExecutionResult.clusterKind() = when (this) {
     is UtExecutionSuccess -> ClusterKind.SUCCESSFUL_EXECUTIONS
+    is UtExecutionSuccessConcrete -> ClusterKind.SUCCESSFUL_EXECUTIONS
     is UtImplicitlyThrownException -> if (this.exception.isCheckedException) ClusterKind.CHECKED_EXCEPTIONS else ClusterKind.ERROR_SUITE
     is UtExplicitlyThrownException -> if (this.exception.isCheckedException) ClusterKind.CHECKED_EXCEPTIONS else ClusterKind.EXPLICITLY_THROWN_UNCHECKED_EXCEPTIONS
     is UtOverflowFailure -> ClusterKind.OVERFLOWS

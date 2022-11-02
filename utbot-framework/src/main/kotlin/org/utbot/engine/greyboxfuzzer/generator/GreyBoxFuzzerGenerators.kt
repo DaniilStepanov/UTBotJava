@@ -8,15 +8,16 @@ import org.utbot.quickcheck.generator.java.util.*
 import org.utbot.quickcheck.generator.java.lang.*
 import org.utbot.quickcheck.generator.java.math.*
 import org.utbot.quickcheck.generator.java.nio.charset.CharsetGenerator
-import org.utbot.quickcheck.generator.java.util.concurrent.CallableGenerator
-import org.utbot.quickcheck.generator.java.util.function.*
-import org.utbot.quickcheck.internal.generator.ServiceLoaderGeneratorSource
 import org.utbot.quickcheck.random.SourceOfRandomness
 import java.util.*
 
-object DataGeneratorSettings {
+object GreyBoxFuzzerGenerators {
 
-    val sourceOfRandomness = SourceOfRandomness(Random(42))
+    const val seed = 42L
+    const val maxDepthOfGeneration = 4
+    val sourceOfRandomness = SourceOfRandomness(Random(seed))
+    val genStatus = NonTrackingGenerationStatus(sourceOfRandomness)
+
     val generatorRepository =
         UTGeneratorRepository(sourceOfRandomness).also {
             it.register(DurationGenerator())
@@ -63,83 +64,16 @@ object DataGeneratorSettings {
             it.register(OptionalLongGenerator())
             it.register(PropertiesGenerator())
             it.register(OptionalGenerator())
-            //TODO fix lambdas
-//            it.register(PredicateGenerator())
-//            it.register(SupplierGenerator())
-//            it.register(ToLongBiFunctionGenerator())
-//            it.register(IntFunctionGenerator())
-//            it.register(ToDoubleBiFunctionGenerator())
-//            it.register(LongFunctionGenerator())
-//            it.register(FunctionGenerator())
-//            it.register(BiPredicateGenerator())
-//            it.register(ToDoubleFunctionGenerator())
-//            it.register(DoubleFunctionGenerator())
-//            it.register(ToIntBiFunctionGenerator())
-//            it.register(ToLongFunctionGenerator())
-//            it.register(BiFunctionGenerator())
-//            it.register(BinaryOperatorGenerator())
-//            it.register(UnaryOperatorGenerator())
-//            it.register(ToIntFunctionGenerator())
-//            it.register(CallableGenerator())
             it.register(DateGenerator())
             it.register(StackGenerator())
             it.register(VoidGenerator())
+            it.register(PrimitiveCharGenerator())
+            it.register(PrimitiveBooleanGenerator())
+            it.register(PrimitiveByteGenerator())
+            it.register(PrimitiveDoubleGenerator())
+            it.register(PrimitiveFloatGenerator())
+            it.register(PrimitiveIntGenerator())
+            it.register(PrimitiveLongGenerator())
+            it.register(PrimitiveShortGenerator())
         }
-
-    //.register(ServiceLoaderGeneratorSource()).also {
-//            it.removeGenerator(Closeable::class.java)
-//            it.replaceGenerator(
-//                Map::class.java,
-//                setOf(HashtableGenerator(), HashMapGenerator(), LinkedHashMapGenerator())
-//            )
-//            it.replaceGenerator(
-//                AbstractMap::class.java,
-//                setOf(HashtableGenerator(), HashMapGenerator(), LinkedHashMapGenerator())
-//            )
-//            it.replaceGenerator(Dictionary::class.java, setOf(HashtableGenerator()))
-//            it.replaceGenerator(Hashtable::class.java, setOf(HashtableGenerator()))
-//            it.replaceGenerator(HashMap::class.java, setOf(HashMapGenerator()))
-//            it.replaceGenerator(LinkedHashMap::class.java, setOf(LinkedHashMapGenerator()))
-//            it.replaceGenerator(Set::class.java, setOf(HashSetGenerator(), LinkedHashSetGenerator()))
-//            it.replaceGenerator(AbstractSet::class.java, setOf(HashSetGenerator(), LinkedHashSetGenerator()))
-//            it.replaceGenerator(HashSet::class.java, setOf(HashSetGenerator()))
-//            it.replaceGenerator(LinkedHashSet::class.java, setOf(LinkedHashSetGenerator()))
-//            it.replaceGenerator(BitSet::class.java, setOf(LinkedHashSetGenerator()))
-//            it.replaceGenerator(
-//                Collection::class.java,
-//                setOf(
-//                    ArrayListGenerator(),
-//                    LinkedListGenerator(),
-//                    StackGenerator(),
-//                    VectorGenerator(),
-//                    HashSetGenerator(),
-//                    LinkedHashSetGenerator()
-//                )
-//            )
-//            it.replaceGenerator(
-//                Iterable::class.java,
-//                setOf(
-//                    ArrayListGenerator(),
-//                    LinkedListGenerator(),
-//                    StackGenerator(),
-//                    VectorGenerator(),
-//                    HashSetGenerator(),
-//                    LinkedHashSetGenerator()
-//                )
-//            )
-//            it.replaceGenerator(
-//                AbstractCollection::class.java,
-//                setOf(
-//                    ArrayListGenerator(),
-//                    LinkedListGenerator(),
-//                    StackGenerator(),
-//                    VectorGenerator(),
-//                    HashSetGenerator(),
-//                    LinkedHashSetGenerator()
-//                )
-//            )
-//        }
-    val genStatus = NonTrackingGenerationStatus(sourceOfRandomness)
-    const val maxDepthOfGeneration = 4
-
 }

@@ -35,6 +35,7 @@ import org.utbot.quickcheck.random.SourceOfRandomness;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.util.Collections;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
@@ -49,7 +50,7 @@ public class ShortGenerator extends IntegralGenerator<Short> {
     private short max = (Short) defaultValueOf(InRange.class, "maxShort");
 
     public ShortGenerator() {
-        super(asList(Short.class, short.class));
+        super(Collections.singletonList(Short.class));
     }
 
     /**

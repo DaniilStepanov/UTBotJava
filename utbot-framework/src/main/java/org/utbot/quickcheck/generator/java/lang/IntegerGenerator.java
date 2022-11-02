@@ -35,6 +35,7 @@ import org.utbot.quickcheck.random.SourceOfRandomness;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.util.Collections;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
@@ -49,7 +50,7 @@ public class IntegerGenerator extends IntegralGenerator<Integer> {
     private int max = (Integer) defaultValueOf(InRange.class, "maxInt");
 
     public IntegerGenerator() {
-        super(asList(Integer.class, int.class));
+        super(Collections.singletonList(Integer.class));
     }
 
     /**

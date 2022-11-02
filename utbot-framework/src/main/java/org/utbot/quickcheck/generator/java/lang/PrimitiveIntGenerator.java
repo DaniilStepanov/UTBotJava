@@ -27,13 +27,15 @@ package org.utbot.quickcheck.generator.java.lang;
 
 import org.utbot.engine.greyboxfuzzer.util.UtModelGenerator;
 import org.utbot.framework.plugin.api.UtModel;
-import org.utbot.quickcheck.generator.DecimalGenerator;
 import org.utbot.quickcheck.generator.GenerationStatus;
 import org.utbot.quickcheck.generator.InRange;
+import org.utbot.quickcheck.generator.IntegralGenerator;
 import org.utbot.quickcheck.internal.Comparables;
 import org.utbot.quickcheck.random.SourceOfRandomness;
 
 import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.util.Collections;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
@@ -41,64 +43,64 @@ import static org.utbot.quickcheck.internal.Reflection.defaultValueOf;
 import static java.util.Arrays.asList;
 
 /**
- * Produces values of type {@code float} or {@link Float}.
+ * Produces values of type {@code int} or {@link Integer}.
  */
-public class FloatGenerator extends DecimalGenerator<Float> {
-    private float min = (Float) defaultValueOf(InRange.class, "minFloat");
-    private float max = (Float) defaultValueOf(InRange.class, "maxFloat");
+public class PrimitiveIntGenerator extends IntegralGenerator<Integer> {
+    private int min = (Integer) defaultValueOf(InRange.class, "minInt");
+    private int max = (Integer) defaultValueOf(InRange.class, "maxInt");
 
-    public FloatGenerator() {
-        super(asList(Float.class));
+    public PrimitiveIntGenerator() {
+        super(Collections.singletonList(int.class));
     }
 
     /**
-     * Tells this generator to produce values within a specified minimum
-     * (inclusive) and/or maximum (exclusive) with uniform distribution.
+     * Tells this generator to produce values within a specified minimum and/or
+     * maximum, inclusive, with uniform distribution.
      *
      * {@link InRange#min} and {@link InRange#max} take precedence over
-     * {@link InRange#minFloat()} and {@link InRange#maxFloat()}, if non-empty.
+     * {@link InRange#minInt()} and {@link InRange#maxInt()}, if non-empty.
      *
      * @param range annotation that gives the range's constraints
      */
     public void configure(InRange range) {
         min =
-            range.min().isEmpty()
-                ? range.minFloat()
-                : Float.parseFloat(range.min());
+                range.min().isEmpty()
+                        ? range.minInt()
+                        : Integer.parseInt(range.min());
         max =
-            range.max().isEmpty()
-                ? range.maxFloat()
-                : Float.parseFloat(range.max());
+                range.max().isEmpty()
+                        ? range.maxInt()
+                        : Integer.parseInt(range.max());
     }
 
     @Override public UtModel generate(
-        SourceOfRandomness random,
-        GenerationStatus status) {
-
-        return UtModelGenerator.getUtModelConstructor().construct(random.nextFloat(min, max), Float.class);
+            SourceOfRandomness random,
+            GenerationStatus status) {
+        return UtModelGenerator.getUtModelConstructor().construct(generateValue(random, status), int.class);
     }
 
-    @Override protected Function<Float, BigDecimal> widen() {
-        return BigDecimal::valueOf;
+    public int generateValue(SourceOfRandomness random,
+                             GenerationStatus status) {
+        return random.nextInt(min, max);
     }
 
-    @Override protected Function<BigDecimal, Float> narrow() {
-        return BigDecimal::floatValue;
+    @Override protected Function<BigInteger, Integer> narrow() {
+        return BigInteger::intValue;
     }
 
-    @Override protected Predicate<Float> inRange() {
+    @Override protected Predicate<Integer> inRange() {
         return Comparables.inRange(min, max);
     }
 
-    @Override protected Float leastMagnitude() {
-        return Comparables.leastMagnitude(min, max, 0F);
+    @Override protected Integer leastMagnitude() {
+        return Comparables.leastMagnitude(min, max, 0);
     }
 
-    @Override protected boolean negative(Float target) {
+    @Override protected boolean negative(Integer target) {
         return target < 0;
     }
 
-    @Override protected Float negate(Float target) {
+    @Override protected Integer negate(Integer target) {
         return -target;
     }
 

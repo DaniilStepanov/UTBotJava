@@ -4,8 +4,6 @@ package org.utbot.engine.greyboxfuzzer.util
 
 import org.utbot.quickcheck.internal.ParameterTypeContext
 import org.javaruntype.type.Types
-import org.utbot.engine.greyboxfuzzer.generator.UserClassesGenerator
-import org.utbot.engine.greyboxfuzzer.generator.getGenericContext
 import org.utbot.engine.rawType
 import org.utbot.framework.codegen.model.constructor.tree.isStatic
 import ru.vyarus.java.generics.resolver.context.GenericsContext
@@ -138,39 +136,6 @@ fun Field.setFieldValue(instance: Any?, fieldValue: Any?) {
     }.also { this.isAccessible = oldAccessibleFlag }
 }
 
-fun Field.setDefaultValue(instance: Any?) {
-    val oldAccessibleFlag = this.isAccessible
-    this.isAccessible = true
-    this.isFinal = false
-    val fixedInstance =
-        if (this.isStatic) {
-            null
-        } else instance
-    when (this.type) {
-        Boolean::class.javaPrimitiveType -> this.setBoolean(fixedInstance, false)
-        Byte::class.javaPrimitiveType -> this.setByte(fixedInstance, 0)
-        Char::class.javaPrimitiveType -> this.setChar(fixedInstance, '\u0000')
-        Short::class.javaPrimitiveType -> this.setShort(fixedInstance, 0)
-        Int::class.javaPrimitiveType -> this.setInt(fixedInstance, 0)
-        Long::class.javaPrimitiveType -> this.setLong(fixedInstance, 0)
-        Float::class.javaPrimitiveType -> this.setFloat(fixedInstance, 0.0f)
-        Double::class.javaPrimitiveType -> this.setDouble(fixedInstance, 0.0)
-        else -> try {
-            this.set(fixedInstance, null)
-        } catch (e: Throwable) {
-            setNullToFieldUsingUnsafe(this)
-        }
-    }.also { this.isAccessible = oldAccessibleFlag }
-}
-
-private fun setNullToFieldUsingUnsafe(field: Field) {
-    if (field.isStatic) {
-        val cl = UserClassesGenerator.UNSAFE.staticFieldBase(field)
-        val offset = UserClassesGenerator.UNSAFE.staticFieldOffset(field)
-        UserClassesGenerator.UNSAFE.getAndSetObject(cl, offset, null)
-    }
-}
-
 fun Type.toClass(): Class<*>? =
     try {
         when (this) {
@@ -243,6 +208,7 @@ fun Class<*>.hasModifiers(vararg modifiers: Int) = modifiers.all { it.and(this.m
 fun Constructor<*>.hasModifiers(vararg modifiers: Int) = modifiers.all { it.and(this.modifiers) > 0 }
 fun Constructor<*>.hasAtLeastOneOfModifiers(vararg modifiers: Int) = modifiers.any { it.and(this.modifiers) > 0 }
 fun Class<*>.hasAtLeastOneOfModifiers(vararg modifiers: Int) = modifiers.any { it.and(this.modifiers) > 0 }
+fun Class<*>.canBeInstantiated() = !hasAtLeastOneOfModifiers(Modifier.ABSTRACT, Modifier.INTERFACE)
 fun Field.hasAtLeastOneOfModifiers(vararg modifiers: Int) = modifiers.any { it.and(this.modifiers) > 0 }
 
 fun ru.vyarus.java.generics.resolver.context.container.ParameterizedTypeImpl.getActualArguments(): Array<Type> {
@@ -350,12 +316,14 @@ fun Method.resolveMethod(
     parameterTypeContext: ParameterTypeContext,
     typeArguments: List<Type>
 ): Pair<LinkedHashMap<String, Type>, GenericsContext> {
-    val cl = this.declaringClass//parameterTypeContext.getResolvedType().rawClass
+    val cl = this.declaringClass//parameterTypeContext.resolved.rawClass
     val resolvedJavaType =
-        parameterTypeContext.getGenericContext().resolveType(parameterTypeContext.type()) as ParameterizedType
+        parameterTypeContext.generics.resolveType(parameterTypeContext.type()) as? ParameterizedType
     val gm = LinkedHashMap<String, Type>()
-    typeArguments.zip(resolvedJavaType.actualTypeArguments.toList()).forEach {
-        gm[it.first.typeName] = it.second
+    if (resolvedJavaType != null) {
+        typeArguments.zip(resolvedJavaType.actualTypeArguments.toList()).forEach {
+            gm[it.first.typeName] = it.second
+        }
     }
     val m = mutableMapOf(cl to gm)
     val generics = LinkedHashMap<String, Type>()
@@ -370,23 +338,27 @@ fun Method.resolveMethod(
 
 fun org.javaruntype.type.Type<*>.convertToPrimitiveIfPossible(): org.javaruntype.type.Type<*> {
     val possiblePrimitive = when (this.toString()) {
-        "java.lang.Short" -> Short::class.java
-        "java.lang.Byte" -> Byte::class.java
-        "java.lang.Integer" -> Int::class.java
-        "java.lang.Long" -> Long::class.java
-        "java.lang.Float" -> Float::class.java
-        "java.lang.Double" -> Double::class.java
-        "java.lang.Char" -> Char::class.java
-        "java.lang.Boolean" -> Boolean::class.java
+        java.lang.Short::class.java.name -> Short::class.java
+        java.lang.Byte::class.java.name -> Byte::class.java
+        java.lang.Integer::class.java.name -> Int::class.java
+        java.lang.Long::class.java.name -> Long::class.java
+        java.lang.Float::class.java.name -> Float::class.java
+        java.lang.Double::class.java.name -> Double::class.java
+        java.lang.Character::class.java.name -> Char::class.java
+        java.lang.Boolean::class.java.name -> Boolean::class.java
         else -> null
     }
     return possiblePrimitive?.let { ReflectionUtils.forJavaReflectTypeSafe(it) } ?: this
 }
 
+fun Type.getActualTypeArguments(): Array<Type> =
+    when (this) {
+        is ParameterizedTypeImpl -> this.actualTypeArguments
+        is ru.vyarus.java.generics.resolver.context.container.ParameterizedTypeImpl -> this.actualTypeArguments
+        else -> arrayOf()
+    }
 class GenericsReplacer {
-
     private val replacedGenerics = mutableListOf<ReplacedTypeParameter>()
-
     private data class ReplacedTypeParameter(
         val type: Type,
         val typeBound: Type?,
@@ -456,6 +428,5 @@ class GenericsReplacer {
             is TypeVariable<*> -> unresolvedType.bounds?.firstOrNull()
             else -> null
         }
-
 
 }

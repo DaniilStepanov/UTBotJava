@@ -3,17 +3,12 @@ package org.utbot.engine.greyboxfuzzer.generator
 import org.utbot.quickcheck.generator.Generator
 import org.utbot.quickcheck.generator.InRange
 import org.utbot.quickcheck.generator.Size
-import org.utbot.quickcheck.generator.java.lang.ByteGenerator
-import org.utbot.quickcheck.generator.java.lang.CharacterGenerator
-import org.utbot.quickcheck.generator.java.lang.DoubleGenerator
-import org.utbot.quickcheck.generator.java.lang.FloatGenerator
-import org.utbot.quickcheck.generator.java.lang.IntegerGenerator
-import org.utbot.quickcheck.generator.java.lang.ShortGenerator
 import org.utbot.quickcheck.generator.java.util.CollectionGenerator
 import org.utbot.quickcheck.generator.java.util.MapGenerator
 import org.utbot.quickcheck.internal.generator.ArrayGenerator
 import org.utbot.engine.greyboxfuzzer.util.getTrue
 import org.utbot.engine.greyboxfuzzer.util.setFieldValue
+import org.utbot.quickcheck.generator.java.lang.*
 import kotlin.random.Random
 
 object GeneratorConfigurator {
@@ -85,6 +80,14 @@ object GeneratorConfigurator {
             is CharacterGenerator -> generator.configure(inRangeAnnotationInstance)
             is FloatGenerator -> generator.configure(inRangeAnnotationInstance)
             is DoubleGenerator -> generator.configure(inRangeAnnotationInstance)
+            is LongGenerator -> generator.configure(inRangeAnnotationInstance)
+            is PrimitiveIntGenerator -> generator.configure(inRangeAnnotationInstance)
+            is PrimitiveByteGenerator -> generator.configure(inRangeAnnotationInstance)
+            is PrimitiveShortGenerator -> generator.configure(inRangeAnnotationInstance)
+            is PrimitiveCharGenerator -> generator.configure(inRangeAnnotationInstance)
+            is PrimitiveFloatGenerator -> generator.configure(inRangeAnnotationInstance)
+            is PrimitiveDoubleGenerator -> generator.configure(inRangeAnnotationInstance)
+            is PrimitiveLongGenerator -> generator.configure(inRangeAnnotationInstance)
             is CollectionGenerator<*> -> generator.configure(sizeAnnotationInstance)
             is ArrayGenerator -> generator.configure(sizeAnnotationInstance)
             is MapGenerator -> generator.configure(sizeAnnotationInstance)

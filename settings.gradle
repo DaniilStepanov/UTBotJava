@@ -30,7 +30,4 @@ include 'utbot-summary-tests'
 include 'utbot-framework-test'
 include 'utbot-rd'
 //include 'utbot-maven'
-include 'utbot-fuzzers:jqf'
-findProject(':utbot-fuzzers:jqf')?.name = 'jqf'
-include 'utbot-fuzzers-jqf'
 

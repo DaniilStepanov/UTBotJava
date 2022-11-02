@@ -36,6 +36,7 @@ import kotlin.reflect.KFunction2
 import kotlin.reflect.KFunction3
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.utbot.framework.UtSettings.useFuzzing
+import org.utbot.framework.UtSettings.useGreyBoxFuzzing
 import org.utbot.framework.util.Conflict
 import org.utbot.testcheckers.ExecutionsNumberMatcher
 
@@ -89,6 +90,7 @@ abstract class UtModelTestCaseChecker(
             // @todo change to the constructor parameter
             checkSolverTimeoutMillis = 0
             useFuzzing = false
+            useGreyBoxFuzzing = false
         }
         val utMethod = UtMethod.from(method)
 

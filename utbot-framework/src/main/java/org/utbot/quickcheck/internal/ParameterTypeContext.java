@@ -40,10 +40,7 @@ import ru.vyarus.java.generics.resolver.context.MethodGenericsContext;
 
 import java.lang.reflect.Type;
 import java.lang.reflect.*;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 
 import static org.utbot.quickcheck.internal.Items.choose;
 import static org.utbot.quickcheck.internal.Reflection.*;
@@ -67,6 +64,12 @@ public class ParameterTypeContext {
     private AnnotatedElement annotatedElement;
     private boolean allowMixedTypes;
 
+    public GenericsContext getGenerics() {
+        return generics;
+    }
+    public org.javaruntype.type.Type<?> getResolved() {
+        return resolved;
+    }
     public static ParameterTypeContext forClass(Class<?> clazz) {
         return new ParameterTypeContext(
             clazz.getTypeName(),
@@ -156,7 +159,7 @@ public class ParameterTypeContext {
             "Cannot find parameter " + parameter + " on " + exec);
     }
 
-    private ParameterTypeContext(
+    public ParameterTypeContext(
         String parameterName,
         AnnotatedType parameterType,
         String declarerName,
@@ -172,7 +175,7 @@ public class ParameterTypeContext {
             -1);
     }
 
-    private ParameterTypeContext(
+     public ParameterTypeContext(
         String parameterName,
         AnnotatedType parameterType,
         String declarerName,
@@ -335,6 +338,28 @@ public class ParameterTypeContext {
         return unmodifiableList(explicits);
     }
 
+    private void addParameterTypeContextToDeque(ArrayDeque<ParameterTypeContext> deque, ParameterTypeContext ptx) {
+        if (ptx.resolved.getName().equals(Zilch.class.getName())) return;
+        deque.add(ptx);
+    }
+    public List<ParameterTypeContext> getAllSubParameterTypeContexts(SourceOfRandomness sourceOfRandomness) {
+        ArrayList<ParameterTypeContext> res = new ArrayList<>();
+        res.add(this);
+        ArrayDeque<ParameterTypeContext> deque = new ArrayDeque<>();
+        if (isArray()) {
+            addParameterTypeContextToDeque(deque, arrayComponentContext());
+            deque.add(arrayComponentContext());
+        }
+        typeParameterContexts(sourceOfRandomness).forEach(ptx -> addParameterTypeContextToDeque(deque, ptx));
+        while (!deque.isEmpty()) {
+            ParameterTypeContext ptx = deque.removeFirst();
+            if (ptx.isArray()) {
+                addParameterTypeContextToDeque(deque, ptx.arrayComponentContext());
+            }
+            ptx.typeParameterContexts(sourceOfRandomness).forEach(ptxNested -> addParameterTypeContextToDeque(deque, ptxNested));
+        }
+        return res;
+    }
     public ParameterTypeContext arrayComponentContext() {
         @SuppressWarnings("unchecked")
         org.javaruntype.type.Type<?> component =
