@@ -66,7 +66,7 @@ class UserClassGenerator : ComponentizedGenerator<Any>(Any::class.java) {
                 depth
             ).generate()
         }
-        return ClassesInstancesGenerator(
+        return ClassesInstanceGenerator(
             clazz!!,
             gctx,
             parameterTypeContext!!.generics,

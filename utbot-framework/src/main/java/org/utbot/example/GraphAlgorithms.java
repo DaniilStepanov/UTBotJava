@@ -81,15 +81,8 @@ public class GraphAlgorithms<T> {
 //        return a.get(a.size() - 1);
 //    }
 
-    public static <R extends Number> int testFunc3(int[] c) {
-        if (c[0] == 0) {
-            if (c[1] == 1) {
-                if (c[2] == 2) {
-                    return 777;
-                }
-            }
-        }
-        return -1;
+    public <T extends Number> int testFunc3(T a) {
+        return 0;
     }
 
     public void lol() {

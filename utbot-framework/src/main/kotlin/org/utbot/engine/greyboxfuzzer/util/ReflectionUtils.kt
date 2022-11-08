@@ -4,6 +4,7 @@ package org.utbot.engine.greyboxfuzzer.util
 
 import org.utbot.quickcheck.internal.ParameterTypeContext
 import org.javaruntype.type.Types
+import org.utbot.common.withAccessibility
 import org.utbot.engine.rawType
 import org.utbot.framework.codegen.model.constructor.tree.isStatic
 import ru.vyarus.java.generics.resolver.context.GenericsContext
@@ -28,21 +29,6 @@ fun Class<*>.getAllDeclaredFields(): List<Field> {
     return res
 }
 
-fun Class<*>.getAllDeclaredFieldsRecursive(instance: Any): List<Pair<Any, Field>> {
-    val queue = ArrayDeque<Pair<Any, Field>>()
-    val res = mutableListOf<Pair<Any, Field>>()
-    this.getAllDeclaredFields().forEach { queue.add(instance to it) }
-    while (queue.isNotEmpty()) {
-        val curField = queue.removeFirst()
-        val fieldValue = curField.second.getFieldValue(curField.first)
-        if (fieldValue != null && res.all { it.second != curField.second }) {
-            res.add(curField)
-            curField.second.type.toClass()?.getAllDeclaredFields()?.forEach { queue.add(fieldValue to it) }
-        }
-    }
-    return res
-}
-
 fun Class<*>.getAllDeclaredMethods(): List<Method> {
     val res = mutableListOf<Method>()
     var current: Class<*>? = this
@@ -53,87 +39,48 @@ fun Class<*>.getAllDeclaredMethods(): List<Method> {
     return res
 }
 
-fun Field.getArrayValues(instance: Any): List<Any> {
-    val arrayOfObjects = (this.getFieldValue(instance) as Array<*>).filterNotNull()
-    val typeOfArrayObjects = if (arrayOfObjects.isEmpty()) Object::class.java else arrayOfObjects.first().javaClass
-    for (i in arrayOfObjects.indices) {
-        val fieldValue = when (typeOfArrayObjects) {
-            Boolean::class.javaObjectType -> RArray.getBoolean(arrayOfObjects, i)
-            Byte::class.javaObjectType -> RArray.getByte(arrayOfObjects, i)
-            Char::class.javaObjectType -> RArray.getChar(arrayOfObjects, i)
-            Short::class.javaObjectType -> RArray.getShort(arrayOfObjects, i)
-            Int::class.javaObjectType -> RArray.getInt(arrayOfObjects, i)
-            Long::class.javaObjectType -> RArray.getLong(arrayOfObjects, i)
-            Float::class.javaObjectType -> RArray.getFloat(arrayOfObjects, i)
-            Double::class.javaObjectType -> RArray.getDouble(arrayOfObjects, i)
-            else -> RArray.get(arrayOfObjects, i)
-        }
-
-    }
-    return emptyList()
-}
-
-//private fun Class<*>.getLowerBoundClass(classes: List<Class<*>>): Class<*> {
-//
-//}
-
-fun Class<*>.getDeclaredFieldEvenNested(name: String) = this.getAllDeclaredFields().find { it.name == name }
-fun Class<*>.getAllSuperClassesAndInterfaces(): List<Class<*>> {
-    val res = mutableListOf<Class<*>>()
-    var superClass = this.superclass
-    res.add(superClass)
-    res.addAll(this.interfaces)
-    while (superClass != null) {
-        res.addAll(superClass.interfaces)
-        superClass = superClass.superclass?.also { res.add(it) }
-    }
-    return res
-}
-
-fun Class<*>.isFunctionalInterface() = annotations.any { it.toString() == "@java.lang.FunctionalInterface()" }
-
 fun Field.getFieldValue(instance: Any?): Any? {
     try {
-        val oldAccessibleFlag = this.isAccessible
-        this.isAccessible = true
         val fixedInstance =
             if (this.isStatic) {
                 null
             } else instance
-        return when (this.type) {
-            Boolean::class.javaPrimitiveType -> this.getBoolean(fixedInstance)
-            Byte::class.javaPrimitiveType -> this.getByte(fixedInstance)
-            Char::class.javaPrimitiveType -> this.getChar(fixedInstance)
-            Short::class.javaPrimitiveType -> this.getShort(fixedInstance)
-            Int::class.javaPrimitiveType -> this.getInt(fixedInstance)
-            Long::class.javaPrimitiveType -> this.getLong(fixedInstance)
-            Float::class.javaPrimitiveType -> this.getFloat(fixedInstance)
-            Double::class.javaPrimitiveType -> this.getDouble(fixedInstance)
-            else -> this.get(fixedInstance)
-        }.also { this.isAccessible = oldAccessibleFlag }
-    } catch (e: Throwable) {
+        return withAccessibility {
+            when (this.type) {
+                Boolean::class.javaPrimitiveType -> this.getBoolean(fixedInstance)
+                Byte::class.javaPrimitiveType -> this.getByte(fixedInstance)
+                Char::class.javaPrimitiveType -> this.getChar(fixedInstance)
+                Short::class.javaPrimitiveType -> this.getShort(fixedInstance)
+                Int::class.javaPrimitiveType -> this.getInt(fixedInstance)
+                Long::class.javaPrimitiveType -> this.getLong(fixedInstance)
+                Float::class.javaPrimitiveType -> this.getFloat(fixedInstance)
+                Double::class.javaPrimitiveType -> this.getDouble(fixedInstance)
+                else -> this.get(fixedInstance)
+            }
+        }
+    } catch (_: Throwable) {
         return null
     }
 }
 
 fun Field.setFieldValue(instance: Any?, fieldValue: Any?) {
-    val oldAccessibleFlag = this.isAccessible
-    this.isAccessible = true
-    val fixedInstance =
-        if (this.isStatic) {
-            null
-        } else instance
-    when (this.type) {
-        Boolean::class.javaPrimitiveType -> this.setBoolean(fixedInstance, fieldValue as Boolean)
-        Byte::class.javaPrimitiveType -> this.setByte(fixedInstance, fieldValue as Byte)
-        Char::class.javaPrimitiveType -> this.setChar(fixedInstance, fieldValue as Char)
-        Short::class.javaPrimitiveType -> this.setShort(fixedInstance, fieldValue as Short)
-        Int::class.javaPrimitiveType -> this.setInt(fixedInstance, fieldValue as Int)
-        Long::class.javaPrimitiveType -> this.setLong(fixedInstance, fieldValue as Long)
-        Float::class.javaPrimitiveType -> this.setFloat(fixedInstance, fieldValue as Float)
-        Double::class.javaPrimitiveType -> this.setDouble(fixedInstance, fieldValue as Double)
-        else -> this.set(fixedInstance, fieldValue)
-    }.also { this.isAccessible = oldAccessibleFlag }
+    withAccessibility {
+        val fixedInstance =
+            if (this.isStatic) {
+                null
+            } else instance
+        when (this.type) {
+            Boolean::class.javaPrimitiveType -> this.setBoolean(fixedInstance, fieldValue as Boolean)
+            Byte::class.javaPrimitiveType -> this.setByte(fixedInstance, fieldValue as Byte)
+            Char::class.javaPrimitiveType -> this.setChar(fixedInstance, fieldValue as Char)
+            Short::class.javaPrimitiveType -> this.setShort(fixedInstance, fieldValue as Short)
+            Int::class.javaPrimitiveType -> this.setInt(fixedInstance, fieldValue as Int)
+            Long::class.javaPrimitiveType -> this.setLong(fixedInstance, fieldValue as Long)
+            Float::class.javaPrimitiveType -> this.setFloat(fixedInstance, fieldValue as Float)
+            Double::class.javaPrimitiveType -> this.setDouble(fixedInstance, fieldValue as Double)
+            else -> this.set(fixedInstance, fieldValue)
+        }
+    }
 }
 
 fun Type.toClass(): Class<*>? =
@@ -357,8 +304,10 @@ fun Type.getActualTypeArguments(): Array<Type> =
         is ru.vyarus.java.generics.resolver.context.container.ParameterizedTypeImpl -> this.actualTypeArguments
         else -> arrayOf()
     }
+
 class GenericsReplacer {
     private val replacedGenerics = mutableListOf<ReplacedTypeParameter>()
+
     private data class ReplacedTypeParameter(
         val type: Type,
         val typeBound: Type?,
@@ -394,6 +343,7 @@ class GenericsReplacer {
             setUpperBoundTo(type, annotatedType, upperBound?.toClass() ?: Any::class.java)
         }
     }
+
     private fun makeReplacement(allUnresolvedTypes: List<ReplacedTypeParameter>) {
         for ((type, upperBound, annotatedType, _) in allUnresolvedTypes) {
             val upperBoundAsSootClass = upperBound?.toClass()?.toSootClass() ?: continue

@@ -26,7 +26,7 @@ class GreyBoxFuzzer(
 
     private val seeds = SeedCollector()
     val kfunction = methodUnderTest.callable as KFunction<*>
-    private val explorationStageIterations = 10
+    private val explorationStageIterations = 100
     private val exploitationStageIterations = 100
     private var thisInstance: UtModel? = generateThisInstance(methodUnderTest.clazz.java)
 
@@ -58,9 +58,8 @@ class GreyBoxFuzzer(
             methodUnderTest,
             currentCoverageByLines
         )
-        println("SEEDS AFTER EXPLORATION STAGE = ${seeds.seedsSize()}")
-        println(seeds.getBestSeed())
-        exploitationStage(exploitationStageIterations, javaClazz, methodLines, currentCoverageByLines)
+        logger.debug { "SEEDS AFTER EXPLORATION STAGE = ${seeds.seedsSize()}" }
+        //exploitationStage(exploitationStageIterations, javaClazz, methodLines, currentCoverageByLines)
         //UtModelGenerator.reset()
         return sequenceOf()
     }
@@ -93,14 +92,14 @@ class GreyBoxFuzzer(
             /**
              * Replacing unresolved generics to random compatible to bounds type
              */
-//            when {
-//                Random.getTrue(10) -> parametersToGenericsReplacer.map { it.second.revert() }
-//                Random.getTrue(50) -> parametersToGenericsReplacer.map {
-//                    it.second.replaceUnresolvedGenericsToRandomTypes(
-//                        it.first
-//                    )
-//                }
-//            }
+            when {
+                Random.getTrue(10) -> parametersToGenericsReplacer.map { it.second.revert() }
+                Random.getTrue(50) -> parametersToGenericsReplacer.map {
+                    it.second.replaceUnresolvedGenericsToRandomTypes(
+                        it.first
+                    )
+                }
+            }
             val generatedParameters =
                 method.parameters.mapIndexed { index, parameter ->
                     DataGenerator.generate(
@@ -110,10 +109,6 @@ class GreyBoxFuzzer(
                         GreyBoxFuzzerGenerators.genStatus
                     ) to classIdForType(parameter.type)
                 }
-            //test
-            val seed = Seed(thisInstance, generatedParameters, 3.0)
-            println(seed)
-            //
             logger.debug { "Generated params = $generatedParameters" }
             logger.debug { "This instance = $thisInstance" }
             val stateBefore =
@@ -242,7 +237,7 @@ class GreyBoxFuzzer(
             val res = executor.executeConcretely(methodUnderTest, stateBefore, listOf())
             res
         } catch (e: Throwable) {
-            logger.debug {"Exception in ${methodUnderTest.displayName} :( $e"}
+            logger.debug { "Exception in ${methodUnderTest.displayName} :( $e" }
             null
         }
 

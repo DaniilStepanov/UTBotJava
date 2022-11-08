@@ -6,7 +6,7 @@ import org.utbot.quickcheck.generator.GenerationStatus
 import org.utbot.quickcheck.random.SourceOfRandomness
 import ru.vyarus.java.generics.resolver.context.GenericsContext
 
-class ClassesInstancesGenerator(
+class ClassesInstanceGenerator(
     private val clazz: Class<*>,
     private val gctx: GenericsContext,
     private val initialContext: GenericsContext?,

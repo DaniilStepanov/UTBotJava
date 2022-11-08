@@ -32,7 +32,7 @@ class InterfaceImplementationsInstanceGenerator(
             }
         }
         val genericsContext = getRandomImplementerGenericContext(clazz, resolvedType) ?: return null
-        return ClassesInstancesGenerator(
+        return ClassesInstanceGenerator(
             genericsContext.currentClass(),
             genericsContext,
             null,
