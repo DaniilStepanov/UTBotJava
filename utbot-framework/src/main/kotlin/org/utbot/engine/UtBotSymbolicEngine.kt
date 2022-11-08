@@ -7,6 +7,7 @@ import org.utbot.analytics.Predictors
 import org.utbot.common.bracket
 import org.utbot.common.debug
 import org.utbot.engine.MockStrategy.NO_MOCKS
+import org.utbot.engine.greyboxfuzzer.GreyBoxFuzzer
 import org.utbot.engine.pc.UtArraySelectExpression
 import org.utbot.engine.pc.UtBoolExpression
 import org.utbot.engine.pc.UtContextInitializer
@@ -83,6 +84,7 @@ import org.utbot.fuzzer.fuzz
 import org.utbot.fuzzer.providers.ObjectModelProvider
 import org.utbot.fuzzer.withMutations
 import org.utbot.instrumentation.ConcreteExecutor
+import ru.vyarus.java.generics.resolver.context.GenericsInfoFactory
 import soot.jimple.Stmt
 import soot.tagkit.ParamNamesTag
 import java.lang.reflect.Method
@@ -522,6 +524,32 @@ class UtBotSymbolicEngine(
             )
         }
     }
+
+    //Simple fuzzing
+    fun greyBoxFuzzing(until: Long = Long.MAX_VALUE) =
+        flow<UtResult> {
+            GenericsInfoFactory.disableCache()
+            val executableId = if (methodUnderTest.isConstructor) {
+                methodUnderTest.javaConstructor!!.executableId
+            } else {
+                methodUnderTest.javaMethod!!.executableId
+            }
+
+            val isFuzzable = executableId.parameters.all { classId ->
+                classId != Method::class.java.id // causes the child process crash at invocation
+            }
+            if (!isFuzzable) {
+                return@flow
+            }
+            try {
+                GreyBoxFuzzer(concreteExecutor.pathsToUserClasses, concreteExecutor.pathsToDependencyClasses, methodUnderTest).fuzz()
+            } catch (e: CancellationException) {
+                logger.debug { "Cancelled by timeout" }
+            } catch (e: Throwable) {
+                emit(UtError("Unexpected fuzzing crash", e))
+            }
+            return@flow
+        }
 
     private suspend fun FlowCollector<UtResult>.emitFailedConcreteExecutionResult(
         stateBefore: EnvironmentModels,

@@ -1,0 +1,17 @@
+WARNING: An illegal reflective access operation has occurred
+WARNING: Illegal reflective access by com.esotericsoftware.kryo.kryo5.unsafe.UnsafeUtil (file:/home/zver/.gradle/caches/modules-2/files-2.1/com.esotericsoftware.kryo/kryo5/5.3.0/ac0deda6f5c30e79702945d8089eda3b6344a729/kryo5-5.3.0.jar) to constructor java.nio.DirectByteBuffer(long,int)
+WARNING: Please consider reporting this to the maintainers of com.esotericsoftware.kryo.kryo5.unsafe.UnsafeUtil
+WARNING: Use --illegal-access=warn to enable warnings of further illegal reflective access operations
+WARNING: All illegal access operations will be denied in a future release
+SET exportedPackages field of class class java.lang.Module to default value
+GENERATING
+p = arg0
+TRYING TO GET GENERATOR FOR java.lang.Integer
+TRYING TO GET GENERATOR FOR java.util.List<java.lang.Integer>
+TRYING TO GET GENERATOR FOR java.lang.Integer
+TRYING TO GET GENERATOR FOR java.util.List<java.lang.Integer>
+TRYING TO GET GENERATOR FOR java.lang.Integer
+G = org.utbot.quickcheck.generator.java.util.StackGenerator@1801a55a
+EXEC RES = org.utbot.framework.concrete.UtConcreteExecutionResult@30dd9615
+EXECUTION RESULT = org.utbot.framework.concrete.UtConcreteExecutionResult@30dd9615
+UtAssembleModel(Integer integer1) val integer1 = java.lang.Integer(25)

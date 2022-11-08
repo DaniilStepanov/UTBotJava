@@ -98,7 +98,7 @@ class KryoHelper constructor(
 }
 
 // This kryo is used to initialize collections properly.
-internal class TunedKryo : Kryo() {
+class TunedKryo : Kryo() {
     init {
         this.references = true
         this.isRegistrationRequired = false
@@ -132,6 +132,12 @@ internal class TunedKryo : Kryo() {
         factory.config.serializeTransient = false
         factory.config.fieldsCanBeNull = true
         this.setDefaultSerializer(factory)
+    }
+
+    fun tryToSerialize(obj: Any) {
+        val temporaryBuffer = ByteArrayOutputStream()
+        val kryoOutput = Output(temporaryBuffer)
+        writeClassAndObject(kryoOutput, obj)
     }
 
     /**

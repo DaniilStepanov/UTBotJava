@@ -123,7 +123,7 @@ private object ConstantsFromIfStatement: ConstantsFinder {
          * Constant should be converted into type of local var in such way that if-statement can be true.
          */
         val valueIndex = useBoxes.indexOf(value)
-        if (useBoxes.size == 2 && valueIndex >= 0 && ifStatement != null) {
+        if (useBoxes.size == 2 && valueIndex >= 0 && ifStatement != null && value !is NullConstant) {
             val exactValue = value.plainValue
             val local = useBoxes[(valueIndex + 1) % 2]
             var op = sootIfToFuzzedOp(ifStatement)

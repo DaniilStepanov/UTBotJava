@@ -491,6 +491,7 @@ class ValueConstructor {
 private fun <R> UtExecutionResult.map(transform: (model: UtModel) -> R): Result<R> = when (this) {
     is UtExecutionSuccess -> Result.success(transform(model))
     is UtExecutionFailure -> Result.failure(exception)
+    is UtExecutionSuccessConcrete -> Result.success(transform(UtNullModel(Any::class.java.id)))
 }
 
 /**

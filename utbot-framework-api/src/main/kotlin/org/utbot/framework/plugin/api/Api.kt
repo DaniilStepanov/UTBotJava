@@ -484,7 +484,7 @@ data class UtAssembleModel private constructor(
     override val classId: ClassId,
     override val modelName: String,
     val instantiationCall: UtExecutableCallModel,
-    val modificationsChain: List<UtStatementModel>,
+    var modificationsChain: List<UtStatementModel>,
     val origin: UtCompositeModel?
 ) : UtReferenceModel(id, classId, modelName) {
 

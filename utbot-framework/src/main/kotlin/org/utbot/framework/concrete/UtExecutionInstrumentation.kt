@@ -43,6 +43,7 @@ import org.utbot.instrumentation.instrumentation.instrumenter.Instrumenter
 import org.utbot.instrumentation.instrumentation.mock.MockClassVisitor
 import java.security.AccessControlException
 import java.security.ProtectionDomain
+import java.time.LocalDateTime
 import java.util.IdentityHashMap
 import kotlin.reflect.jvm.javaMethod
 
@@ -333,7 +334,7 @@ object UtExecutionInstrumentation : Instrumentation<UtConcreteExecutionResult> {
 /**
  * Transforms a list of internal [EtInstruction]s to a list of api [Instruction]s.
  */
-private fun List<EtInstruction>.toApiCoverage(instructionsCount: Long? = null): Coverage =
+internal fun List<EtInstruction>.toApiCoverage(instructionsCount: Long? = null): Coverage =
     Coverage(
         map { Instruction(it.className, it.methodSignature, it.line, it.id) },
         instructionsCount

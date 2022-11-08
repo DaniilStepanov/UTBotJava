@@ -68,7 +68,7 @@ class UtModelConstructor(
         .mapNotNull { it.id }
         .toMutableSet()
 
-    private fun computeUnusedIdAndUpdate(): Int {
+    fun computeUnusedIdAndUpdate(): Int {
         while (unusedId in usedIds) {
             unusedId++
         }
@@ -263,7 +263,11 @@ class UtModelConstructor(
      */
     private fun constructFromAny(value: Any): UtModel =
         constructedObjects.getOrElse(value) {
-            tryConstructUtAssembleModel(value) ?: constructCompositeModel(value)
+            try {
+                tryConstructUtAssembleModel(value) ?: constructCompositeModel(value)
+            } catch (e: Throwable) {
+                constructCompositeModel(value)
+            }
         }
 
     /**
