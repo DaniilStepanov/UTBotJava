@@ -18,6 +18,7 @@ import org.utbot.common.trace
 import org.utbot.engine.EngineController
 import org.utbot.engine.Mocker
 import org.utbot.engine.UtBotSymbolicEngine
+import org.utbot.engine.greyboxfuzzer.util.GreyBoxFuzzingStatisticPrinter
 import org.utbot.framework.TestSelectionStrategyType
 import org.utbot.framework.UtSettings
 import org.utbot.framework.UtSettings.checkSolverTimeoutMillis
@@ -83,8 +84,17 @@ open class TestCaseGenerator(
             if (disableCoroutinesDebug) {
                 System.setProperty(kotlinx.coroutines.DEBUG_PROPERTY_NAME, kotlinx.coroutines.DEBUG_PROPERTY_VALUE_OFF)
             }
-
             timeoutLogger.trace().bracket("Soot initialization") {
+//                val jarsPaths = classpath!!.split(":").filter { it.endsWith(".jar") }
+//                for (jarPath in jarsPaths) {
+//                    val jarFile = JarFile(jarPath)
+//                    for (jarEntry in jarFile.entries()) {
+//                        if (jarEntry.name.endsWith(".class")) {
+//                            val className = jarEntry.name.removeSuffix(".class").replace('/', '.')
+//                            SootUtils.libraryClassesToLoad.add(className)
+//                        }
+//                    }
+//                }
                 SootUtils.runSoot(buildDirs, classpath, forceSootReload, jdkInfo)
             }
 
@@ -156,10 +166,15 @@ open class TestCaseGenerator(
         runIgnoringCancellationException {
             runBlockingWithCancellationPredicate(isCanceled) {
                 for ((method, controller) in method2controller) {
+                    //TODO REMOVE
+//                    println(method.displayName)
+//                    if (!method.displayName.contains("testFunc3")) continue
                     controller.job = launch(currentUtContext) {
                         if (!isActive) return@launch
 
                         try {
+                            //TODO!! DO NOT FORGET TO REMOVE IT
+                            //if (!method.displayName.contains("searchColumnNumber")) return@launch
                             //yield one to
                             yield()
 
@@ -226,7 +241,9 @@ open class TestCaseGenerator(
         }
         ConcreteExecutor.defaultPool.close() // TODO: think on appropriate way to close child processes
 
-
+        if (UtSettings.useGreyBoxFuzzing) {
+            GreyBoxFuzzingStatisticPrinter.printFuzzingStats(methods)
+        }
         return methods.map { method ->
             UtMethodTestSet(
                 method,

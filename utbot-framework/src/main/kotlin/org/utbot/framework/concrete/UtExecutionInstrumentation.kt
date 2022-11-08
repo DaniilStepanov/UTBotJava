@@ -333,7 +333,7 @@ object UtExecutionInstrumentation : Instrumentation<UtConcreteExecutionResult> {
 /**
  * Transforms a list of internal [EtInstruction]s to a list of api [Instruction]s.
  */
-private fun List<EtInstruction>.toApiCoverage(instructionsCount: Long? = null): Coverage =
+internal fun List<EtInstruction>.toApiCoverage(instructionsCount: Long? = null): Coverage =
     Coverage(
         map { Instruction(it.className, it.methodSignature, it.line, it.id) },
         instructionsCount

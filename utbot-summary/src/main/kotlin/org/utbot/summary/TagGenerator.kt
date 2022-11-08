@@ -1,18 +1,6 @@
 package org.utbot.summary
 
-import org.utbot.framework.plugin.api.Step
-import org.utbot.framework.plugin.api.UtConcreteExecutionFailure
-import org.utbot.framework.plugin.api.UtExecution
-import org.utbot.framework.plugin.api.UtExecutionResult
-import org.utbot.framework.plugin.api.UtExecutionSuccess
-import org.utbot.framework.plugin.api.UtExplicitlyThrownException
-import org.utbot.framework.plugin.api.UtImplicitlyThrownException
-import org.utbot.framework.plugin.api.UtMethodTestSet
-import org.utbot.framework.plugin.api.UtOverflowFailure
-import org.utbot.framework.plugin.api.UtSandboxFailure
-import org.utbot.framework.plugin.api.UtStreamConsumingFailure
-import org.utbot.framework.plugin.api.UtSymbolicExecution
-import org.utbot.framework.plugin.api.UtTimeoutException
+import org.utbot.framework.plugin.api.*
 import org.utbot.framework.plugin.api.util.humanReadableName
 import org.utbot.framework.plugin.api.util.isCheckedException
 import org.utbot.fuzzer.UtFuzzedExecution
@@ -220,6 +208,7 @@ private fun UtExecutionResult.clusterKind() = when (this) {
     is UtTimeoutException -> ExecutionGroup.TIMEOUTS
     is UtConcreteExecutionFailure -> ExecutionGroup.CRASH_SUITE
     is UtSandboxFailure -> ExecutionGroup.SECURITY
+    is UtExecutionSuccessConcrete -> ExecutionGroup.SUCCESSFUL_EXECUTIONS
 }
 
 /**
