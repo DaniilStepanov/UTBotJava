@@ -1,4 +1,4 @@
-package org.utbot.example;
+package org.utbot.examples;
 
 import java.util.*;
 
@@ -23,7 +23,6 @@ public class GraphAlgorithms<T> {
         this.a = a;
         this.lol = lol;
     }
-
     int a;
     public T lol;
 //    ArrayList<? extends Double> arr2;
@@ -81,7 +80,12 @@ public class GraphAlgorithms<T> {
 //        return a.get(a.size() - 1);
 //    }
 
-    public <T extends Number> int testFunc3(T a) {
+    public <T extends Number> int testFunc3(ArrayList<A<T>> arr) {
+        if (arr.get(0).a == 0) {
+            if (arr.get(1).a == 1) {
+                return 777;
+            }
+        }
         return 0;
     }
 

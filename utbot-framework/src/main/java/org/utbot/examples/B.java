@@ -1,6 +1,4 @@
-package org.utbot.example;
-
-import java.util.ArrayList;
+package org.utbot.examples;
 
 public class B {
     int a;

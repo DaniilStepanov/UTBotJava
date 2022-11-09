@@ -13,10 +13,9 @@ object GreyBoxFuzzingStatisticPrinter {
     fun printFuzzingStats(methods: List<ExecutableId>) {
 //        //Printing to console
         val clazz = methods.first().classId
-        val sootClazz = Scene.v().classes.find { it.name == clazz.jvmName }!!
-        val methodsToLineNumbers = sootClazz.methods.mapNotNull {
-            val sig = it.bytecodeSignature.drop(1).dropLast(1).substringAfter("${clazz.jvmName}: ")
-            val (sootMethod, javaMethod) = it to clazz.jClass.declaredMethods.find { it.signature == sig }
+        val sootClazz = Scene.v().classes.find { it.name == clazz.name }!!
+        val methodsToLineNumbers = sootClazz.methods.mapNotNull { sootMethod ->
+            val javaMethod = sootMethod.toJavaMethod()
             if (javaMethod?.kotlinFunction != null) {
                 javaMethod to sootMethod.activeBody.units
                     .map { it.javaSourceStartLineNumber }
@@ -45,7 +44,7 @@ object GreyBoxFuzzingStatisticPrinter {
         val allLinesToCover = methodsToLineNumbers.flatMap { it.second }.toSet()
         val allLinesToCoverSize = allLinesToCover.size
         val allCoveredLines = CoverageCollector.coverage
-            .filter { it.className.replace('/', '.') == clazz.jvmName }
+            .filter { it.className.replace('/', '.') == clazz.name }
             .map { it.lineNumber }.toSet()
             .filter { it in allLinesToCover }
             .size

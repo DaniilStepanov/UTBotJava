@@ -17,6 +17,7 @@ import java.lang.reflect.Method
 import kotlin.random.Random
 import kotlin.reflect.KFunction
 import kotlin.reflect.jvm.javaMethod
+import kotlin.system.exitProcess
 
 class GreyBoxFuzzer(
     private val pathsToUserClasses: String,
@@ -26,7 +27,7 @@ class GreyBoxFuzzer(
 
     private val seeds = SeedCollector()
 //    val kfunction = methodUnderTest as KFunction<*>
-    private val explorationStageIterations = 100
+    private val explorationStageIterations = 10
     private val exploitationStageIterations = 100
     private var thisInstance: UtModel? = generateThisInstance(methodUnderTest.classId.jClass)
 
@@ -34,24 +35,24 @@ class GreyBoxFuzzer(
     suspend fun fuzz(): Sequence<List<UtModel>> {
         logger.debug { "Started to fuzz ${methodUnderTest.name}" }
         val javaClazz = methodUnderTest.classId.jClass
+        val javaMethod = methodUnderTest.sootMethod.toJavaMethod()!!
         val sootMethod = methodUnderTest.sootMethod
         val classFieldsUsedByFunc = sootMethod.getClassFieldsUsedByFunc(javaClazz)
         val methodLines = sootMethod.activeBody.units.map { it.javaSourceStartLineNumber }.filter { it != -1 }.toSet()
         val currentCoverageByLines = CoverageCollector.coverage
-                //TODO check
             .filter { it.methodSignature == methodUnderTest.signature }
             .map { it.lineNumber }
             .toSet()
         //TODO repeat or while
-//        explorationStage(
-//            javaMethod,
-//            explorationStageIterations,
-//            methodLines,
-//            javaClazz,
-//            classFieldsUsedByFunc,
-//            methodUnderTest,
-//            currentCoverageByLines
-//        )
+        explorationStage(
+            javaMethod,
+            explorationStageIterations,
+            methodLines,
+            javaClazz,
+            classFieldsUsedByFunc,
+            methodUnderTest,
+            currentCoverageByLines
+        )
         logger.debug { "SEEDS AFTER EXPLORATION STAGE = ${seeds.seedsSize()}" }
         //exploitationStage(exploitationStageIterations, javaClazz, methodLines, currentCoverageByLines)
         //UtModelGenerator.reset()
@@ -101,12 +102,12 @@ class GreyBoxFuzzer(
                         index,
                         GreyBoxFuzzerGenerators.sourceOfRandomness,
                         GreyBoxFuzzerGenerators.genStatus
-                    ) to classIdForType(parameter.type)
+                    )
                 }
             logger.debug { "Generated params = $generatedParameters" }
             logger.debug { "This instance = $thisInstance" }
             val stateBefore =
-                EnvironmentModels(thisInstance, generatedParameters.map { it.first.utModel }, mapOf())
+                EnvironmentModels(thisInstance, generatedParameters.map { it.utModel }, mapOf())
             try {
                 val executionResult = execute(stateBefore, methodUnderTest) ?: return@repeat
                 logger.debug { "Execution result: $executionResult" }
@@ -140,7 +141,8 @@ class GreyBoxFuzzer(
     }
 
 
-    private suspend fun exploitationStage(
+    //TODO under construction
+    private fun exploitationStage(
         numberOfIterations: Int,
         clazz: Class<*>,
         methodLinesToCover: Set<Int>,
@@ -149,6 +151,9 @@ class GreyBoxFuzzer(
         logger.debug { "Exploitation began" }
         repeat(numberOfIterations) {
             val randomSeed = seeds.getRandomWeightedSeed() ?: return@repeat
+            val randomSeedArgs = randomSeed.arguments.toMutableList()
+            val randomParameter = randomSeedArgs.random()
+            Mutator.mutateParameter(randomParameter)
         }
     }
 //    private suspend fun exploitationStage(
@@ -229,10 +234,9 @@ class GreyBoxFuzzer(
                     pathsToUserClasses,
                     pathsToDependencyClasses
                 ).apply { this.classLoader = utContext.classLoader }
-            val res = executor.executeConcretely(methodUnderTest, stateBefore, listOf())
-            res
+            executor.executeConcretely(methodUnderTest, stateBefore, listOf())
         } catch (e: Throwable) {
-            logger.debug { "Exception in ${methodUnderTest} :( $e" }
+            logger.debug { "Exception in $methodUnderTest :( $e" }
             null
         }
 

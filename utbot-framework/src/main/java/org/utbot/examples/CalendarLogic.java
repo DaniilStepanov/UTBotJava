@@ -1,4 +1,4 @@
-package org.utbot.example;
+package org.utbot.examples;
 
 import java.util.GregorianCalendar;
 

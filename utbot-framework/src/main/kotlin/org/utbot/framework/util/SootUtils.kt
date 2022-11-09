@@ -91,9 +91,9 @@ private fun initSoot(buildDirs: List<Path>, classpath: String?, jdkInfo: JdkInfo
         set_full_resolver(true)
     }
 
-        addBasicClasses(*classesToLoad)
-        addLibraryClasses(libraryClassesToLoad)
-        loadJavaStdLibClasses()
+    addBasicClasses(*classesToLoad)
+    addLibraryClasses(libraryClassesToLoad)
+    loadJavaStdLibClasses()
 
     Scene.v().loadNecessaryClasses()
     PackManager.v().runPacks()
@@ -138,34 +138,34 @@ val ExecutableId.sootMethod: SootMethod
 fun jimpleBody(method: ExecutableId): JimpleBody =
     method.sootMethod.jimpleBody()
 
-    private fun addBasicClasses(vararg classes: Class<*>) {
-        classes.forEach {
-            Scene.v().addBasicClass(it.name, SootClass.BODIES)
-        }
+private fun addBasicClasses(vararg classes: Class<*>) {
+    classes.forEach {
+        Scene.v().addBasicClass(it.name, SootClass.BODIES)
     }
+}
 
-    private fun addLibraryClasses(classesNames: kotlin.collections.List<String>) {
-        classesNames.forEach {
+private fun addLibraryClasses(classesNames: kotlin.collections.List<String>) {
+    classesNames.forEach {
+        Scene.v().addBasicClass(it, SootClass.BODIES)
+    }
+}
+
+private fun loadJavaStdLibClasses() {
+    val fs = FileSystems.getFileSystem(URI.create("jrt:/"))
+    val javaUtilsClasses = Files.walk(fs.getPath("modules", "java.base", "java/util")).toList()
+    val javaLangClasses = Files.walk(fs.getPath("modules", "java.base", "java/lang")).toList()
+    val classesToLoad =
+        (javaUtilsClasses + javaLangClasses)
+            .filter { it.absolutePathString().endsWith(".class") }
+            .filterNot { it.absolutePathString().contains("$") }
+    classesToLoad
+        .map { it.absolutePathString().removePrefix("/modules/java.base/").replace('/', '.') }
+        .forEach {
             Scene.v().addBasicClass(it, SootClass.BODIES)
         }
-    }
+}
 
-    private fun loadJavaStdLibClasses() {
-        val fs = FileSystems.getFileSystem(URI.create("jrt:/"))
-        val javaUtilsClasses = Files.walk(fs.getPath("modules", "java.base", "java/util")).toList()
-        val javaLangClasses = Files.walk(fs.getPath("modules", "java.base", "java/lang")).toList()
-        val classesToLoad =
-            (javaUtilsClasses + javaLangClasses)
-                .filter { it.absolutePathString().endsWith(".class") }
-                .filterNot { it.absolutePathString().contains("$") }
-        classesToLoad
-            .map { it.absolutePathString().removePrefix("/modules/java.base/").replace('/', '.') }
-            .forEach {
-                Scene.v().addBasicClass(it, SootClass.BODIES)
-            }
-    }
-
-    val libraryClassesToLoad = mutableListOf<String>()
+val libraryClassesToLoad = mutableListOf<String>()
 
 private val classesToLoad = arrayOf(
     org.utbot.engine.overrides.collections.AbstractCollection::class,

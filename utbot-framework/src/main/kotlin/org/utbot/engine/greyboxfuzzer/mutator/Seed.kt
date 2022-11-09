@@ -5,6 +5,6 @@ import org.utbot.framework.plugin.api.ClassId
 
 data class Seed(
     val thisInstance: Any?,
-    val arguments: List<Pair<FParameter?, ClassId>>,
+    val arguments: List<FParameter>,
     val priority: Double = 0.0
 )

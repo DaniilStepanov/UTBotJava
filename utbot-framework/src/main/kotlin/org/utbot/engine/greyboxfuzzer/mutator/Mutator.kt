@@ -4,6 +4,7 @@ import org.javaruntype.type.Types
 import org.utbot.engine.greyboxfuzzer.generator.DataGenerator
 import org.utbot.engine.greyboxfuzzer.generator.GreyBoxFuzzerGenerators
 import org.utbot.engine.greyboxfuzzer.generator.FParameter
+import org.utbot.engine.greyboxfuzzer.generator.getOrProduceGenerator
 import org.utbot.engine.greyboxfuzzer.util.*
 import org.utbot.engine.logger
 import org.utbot.external.api.classIdForType
@@ -12,6 +13,7 @@ import org.utbot.framework.plugin.api.*
 import org.utbot.framework.plugin.api.util.fieldId
 import org.utbot.framework.plugin.api.util.method
 import org.utbot.quickcheck.internal.ParameterTypeContext
+import org.utbot.quickcheck.internal.generator.GeneratorRepository
 import java.lang.reflect.Field
 import java.lang.reflect.Modifier
 import kotlin.random.Random
@@ -55,7 +57,7 @@ object Mutator {
             ) && oldFieldValue != null
         ) return clazzInstance
         val fieldType = parameterTypeContext.generics.resolveFieldType(field)
-        logger.debug{"F = $field TYPE = $fieldType OLDVALUE = $oldFieldValue"}
+        logger.debug { "F = $field TYPE = $fieldType OLDVALUE = $oldFieldValue" }
         val parameterTypeContextForResolvedType = ParameterTypeContext(
             field.name,
             field.annotatedType,
@@ -73,90 +75,42 @@ object Mutator {
             return clazzInstance.addModification(UtDirectSetFieldModel(clazzInstance, field.fieldId, newFieldValue))
         }
         return clazzInstance
-//        val generator = DataGeneratorSettings.generatorRepository.getOrProduceGenerator(
-//            parameterTypeContextForResolvedType,
-//            0
-//        ) ?: return null
-//        if (isRecursiveWithUnsafe) {
-//            (listOf(generator) + generator.getAllComponents()).forEach {
-//                if (it is UserClassesGenerator) it.generationMethod = GenerationMethod.UNSAFE
-//            }
-//        }
-//        println("I GOT GENERATOR!! $generator")
-//        var newFieldValue: Any? = null
-//        repeat(3) {
-//            try {
-//                if (newFieldValue == null) {
-//                    newFieldValue =
-//                        generator.generate(DataGeneratorSettings.sourceOfRandomness, DataGeneratorSettings.genStatus)
-//                }
-//            } catch (e: Exception) {
-//                return@repeat
-//            }
-//        }
-//        println("NEW VALUE GENERATED!!")
-//        if (newFieldValue != null) {
-//            try {
-//                println("NEW VALUE = ${newFieldValue} CLASS ${newFieldValue!!::class.java}")
-//            } catch (e: Throwable) {
-//                println("NEW VALUE OF CLASS ${newFieldValue!!::class.java} generated")
-//            }
-//        }
-//        if (newFieldValue != null) {
-//            field.setFieldValue(clazzInstance, newFieldValue)
-//        }
-//        return newFieldValue
     }
 
 
-//    suspend fun mutateParameter(
-//        fParameter: FParameter,
-//        initialInstance: UtReferenceModel,
-//        modelConstructor: UtModelConstructor
-//    ): FParameter? {
-//        val originalParameter = fParameter.parameter
+    fun mutateParameter(
+        fParameter: FParameter
+    ): FParameter {
+        val originalParameter = fParameter.parameter
+        val originalUtModel = fParameter.utModel
 //        if (Random.getTrue(100)) {
 //            return regenerateRandomParameter(fParameter)
 //        }
-////        val randomMethod = initialInstance.classId.allMethods
-////            .filter { !it.name.startsWith("get") && !it.name.startsWith("to")}
-////            .filter { it.classId.name != "java.lang.Object" }
-////            .filter { it.parameters.all { !it.name.startsWith("java.util.function") } }
-////            .toList()
-////            .randomOrNull() ?: return null
-//        val randomMethod = initialInstance.classId.allMethods.first { it.name == "set" }//.first { it.name == "addAll" }
-//        val generatedParams =
-//            randomMethod.method.parameters.mapIndexed { index, parameter ->
-//                val resolvedParameterCtx =
-//                    originalParameter.resolveParameterTypeAndBuildParameterContext(index, randomMethod.method)
-//                DataGenerator.generate(
-//                    resolvedParameterCtx,
-//                    parameter,
-//                    index,
-//                    GreyBoxFuzzerGenerators.sourceOfRandomness,
-//                    GreyBoxFuzzerGenerators.genStatus
-//                ) to classIdForType(parameter.type)
-//            }.map {
-//                if (it.first.value != null) {
-//                    ZestUtils.setUnserializableFieldsToNull(it.first.value!!)
-//                    modelConstructor.constructWithTimeoutOrNull(it.first.value, it.second)?: UtNullModel(it.second)
-//                } else {
-//                    UtNullModel(it.second)
-//                }
-//            }
-//        val callModel = UtExecutableCallModel(initialInstance, randomMethod, generatedParams)
-//        //val resUtModelId = modelConstructor.computeUnusedIdAndUpdate()
-//        val resModel = UtAssembleModel(
-//            initialInstance.id,
-//            initialInstance.classId,
-//            "${initialInstance.id}",
-//            emptyList(),
-//            listOf(callModel),
-//            initialInstance = initialInstance
-//        )
-//
-//        return FParameter(originalParameter, null, resModel, fParameter.generator, fParameter.fields)
-//    }
+//        val randomMethod = initialInstance.classId.allMethods
+//            .filter { !it.name.startsWith("get") && !it.name.startsWith("to")}
+//            .filter { it.classId.name != "java.lang.Object" }
+//            .filter { it.parameters.all { !it.name.startsWith("java.util.function") } }
+//            .toList()
+//            .randomOrNull() ?: return null
+        val randomMethod = fParameter.classId.allMethods.toList().randomOrNull() ?: return fParameter
+        val parametersForMethodInvocation =
+            randomMethod.method.parameters.mapIndexed { index, parameter ->
+                val resolvedParameterCtx =
+                    originalParameter.resolveParameterTypeAndBuildParameterContext(index, randomMethod.method)
+                val generatorForParameter =
+                    GreyBoxFuzzerGenerators.generatorRepository.getOrProduceGenerator(resolvedParameterCtx, 0)
+                        ?: return fParameter
+                DataGenerator.generate(
+                    generatorForParameter,
+                    parameter,
+                    GreyBoxFuzzerGenerators.sourceOfRandomness,
+                    GreyBoxFuzzerGenerators.genStatus
+                ).utModel
+            }
+        val callModel = UtExecutableCallModel(fParameter.utModel as UtReferenceModel, randomMethod, parametersForMethodInvocation)
+        (originalUtModel as UtAssembleModel).addModification(callModel)
+        return FParameter(originalParameter, null, fParameter.utModel, fParameter.generator, fParameter.fields)
+    }
 
 
 //    private fun mutateInput(oldData: Any, sourceOfRandomness: SourceOfRandomness): Any {

@@ -1,6 +1,6 @@
-package org.utbot.example;
+package org.utbot.examples;
 
-import java.util.ArrayList;
+import java.lang.reflect.Field;
 
 class A<R> {
     public A(int a, R at) {
@@ -22,9 +22,14 @@ class A<R> {
     final int b = 1;
 
     public static A<Number> produceA(int a, Number b) {
-        return new A<Number>(a, b);
+        return new A<Number>(777, b);
     }
-    public static A<Number> aInstance = new A<Number>(1, 13.0);
+    //public static A<Number> aInstance = new A<Number>(777, 13.0);
+
+    public static void main(String[] args) throws NoSuchFieldException, IllegalAccessException {
+        Field f = A.class.getField("aInstance");
+        System.out.println(f.get(null));
+    }
 
     //public int lol(R a, ArrayList<R> arr);
 //    public static <R extends Number> A<R> getInstance1(R a, ArrayList<R> arr) {

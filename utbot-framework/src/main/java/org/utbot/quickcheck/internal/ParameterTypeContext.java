@@ -353,6 +353,7 @@ public class ParameterTypeContext {
         typeParameterContexts(sourceOfRandomness).forEach(ptx -> addParameterTypeContextToDeque(deque, ptx));
         while (!deque.isEmpty()) {
             ParameterTypeContext ptx = deque.removeFirst();
+            res.add(ptx);
             if (ptx.isArray()) {
                 addParameterTypeContextToDeque(deque, ptx.arrayComponentContext());
             }

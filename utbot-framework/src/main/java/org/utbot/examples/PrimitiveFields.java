@@ -1,4 +1,4 @@
-package org.utbot.example;
+package org.utbot.examples;
 
 /**
  * A class with private fields of primitive type

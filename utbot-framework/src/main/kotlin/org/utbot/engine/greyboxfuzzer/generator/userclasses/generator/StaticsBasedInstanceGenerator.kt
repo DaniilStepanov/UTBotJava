@@ -18,7 +18,8 @@ open class StaticsBasedInstanceGenerator(
             StaticsMethodBasedInstanceGenerator(clazz, gctx, sourceOfRandomness, generationStatus, depth)
         val staticFieldBasedGenerator =
             StaticsFieldBasedInstanceGenerator(clazz, gctx)
-        return if (Random.nextBoolean()) {
+        //TODO: repair StaticFieldBasedGenerator
+        return if (true) {
             staticMethodBasedGenerator.generate() ?: staticFieldBasedGenerator.generate()
         } else {
             staticFieldBasedGenerator.generate() ?: staticMethodBasedGenerator.generate()

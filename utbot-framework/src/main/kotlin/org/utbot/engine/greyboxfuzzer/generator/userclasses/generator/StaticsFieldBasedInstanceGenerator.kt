@@ -5,6 +5,7 @@ import org.utbot.engine.greyboxfuzzer.util.UtModelGenerator
 import org.utbot.engine.greyboxfuzzer.util.hasModifiers
 import org.utbot.engine.greyboxfuzzer.util.toClass
 import org.utbot.external.api.classIdForType
+import org.utbot.framework.codegen.model.constructor.builtin.setAccessible
 import org.utbot.framework.concrete.UtModelConstructor
 import org.utbot.framework.plugin.api.*
 import org.utbot.framework.plugin.api.util.*
@@ -47,17 +48,6 @@ internal class StaticsFieldBasedInstanceGenerator(
     ): UtAssembleModel {
         with(utModelConstructor) {
             val classInstanceModel = construct(clazz, classClassId) as UtReferenceModel
-            val classModelId = computeUnusedIdAndUpdate()
-            val classModel = UtAssembleModel(
-                classModelId,
-                Class::class.java.id,
-                "cls_$classModelId",
-                UtExecutableCallModel(
-                    instance = null,
-                    executable = methodId(Objects::class.java.id, "requireNonNull", objectClassId, objectClassId),
-                    params = listOf(classInstanceModel),
-                )
-            )
 
             val fieldModelId = computeUnusedIdAndUpdate()
             val fieldModel = UtAssembleModel(
@@ -65,7 +55,7 @@ internal class StaticsFieldBasedInstanceGenerator(
                 Field::class.java.id,
                 "field_$fieldModelId",
                 UtExecutableCallModel(
-                    classModel,
+                    classInstanceModel,
                     Class<*>::getField.executableId,
                     listOf(construct(field.name, stringClassId)),
                 )

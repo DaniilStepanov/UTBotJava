@@ -1,4 +1,4 @@
-package org.utbot.example;
+package org.utbot.examples;
 
 /**
  * A dynamically extensible vector of bytes. This class is roughly equivalent to

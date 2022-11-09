@@ -44,7 +44,7 @@ object DataGenerator {
         return generate(generator, parameter, random, status)
     }
 
-    private fun generate(
+    fun generate(
         generator: Generator<*>?,
         parameter: Parameter,
         random: SourceOfRandomness,
