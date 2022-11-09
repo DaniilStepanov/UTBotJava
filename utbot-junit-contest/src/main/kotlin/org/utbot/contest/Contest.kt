@@ -156,6 +156,7 @@ fun main(args: Array<String>) {
 fun setOptions() {
     Settings.defaultConcreteExecutorPoolSize = 1
     UtSettings.useFuzzing = true
+    UtSettings.useGreyBoxFuzzing = false
     UtSettings.classfilesCanChange = false
     UtSettings.useAssembleModelGenerator = false
     UtSettings.enableSummariesGeneration = false

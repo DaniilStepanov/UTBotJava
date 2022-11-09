@@ -1,5 +1,6 @@
 package org.utbot.framework.plugin.api
 
+import org.utbot.framework.plugin.api.util.id
 import org.utbot.framework.plugin.api.visible.UtStreamConsumingException
 import java.io.File
 import java.util.LinkedList
@@ -19,6 +20,10 @@ sealed class UtExecutionFailure : UtExecutionResult() {
      */
     open val rootCauseException: Throwable
         get() = exception
+}
+
+data class UtExecutionSuccessConcrete(val result: Any?) : UtExecutionResult() {
+    override fun toString() = "$result"
 }
 
 data class UtOverflowFailure(
@@ -105,9 +110,11 @@ inline fun UtExecutionResult.onFailure(action: (exception: Throwable) -> Unit): 
 fun UtExecutionResult.getOrThrow(): UtModel = when (this) {
     is UtExecutionSuccess -> model
     is UtExecutionFailure -> throw exception
+    is UtExecutionSuccessConcrete -> UtNullModel(Any::class.java.id)
 }
 
 fun UtExecutionResult.exceptionOrNull(): Throwable? = when (this) {
     is UtExecutionFailure -> rootCauseException
     is UtExecutionSuccess -> null
+    is UtExecutionSuccessConcrete -> null
 }

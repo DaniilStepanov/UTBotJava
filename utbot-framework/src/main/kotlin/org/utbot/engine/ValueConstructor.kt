@@ -28,6 +28,7 @@ import org.utbot.framework.plugin.api.UtExecution
 import org.utbot.framework.plugin.api.UtExecutionFailure
 import org.utbot.framework.plugin.api.UtExecutionResult
 import org.utbot.framework.plugin.api.UtExecutionSuccess
+import org.utbot.framework.plugin.api.UtExecutionSuccessConcrete
 import org.utbot.framework.plugin.api.UtLambdaModel
 import org.utbot.framework.plugin.api.UtMockValue
 import org.utbot.framework.plugin.api.UtModel
@@ -40,6 +41,7 @@ import org.utbot.framework.plugin.api.UtValueExecutionState
 import org.utbot.framework.plugin.api.UtVoidModel
 import org.utbot.framework.plugin.api.isMockModel
 import org.utbot.framework.plugin.api.util.constructor
+import org.utbot.framework.plugin.api.util.id
 import org.utbot.framework.plugin.api.util.isStatic
 import org.utbot.framework.plugin.api.util.jField
 import org.utbot.framework.plugin.api.util.jClass
@@ -493,6 +495,7 @@ class ValueConstructor {
 private fun <R> UtExecutionResult.map(transform: (model: UtModel) -> R): Result<R> = when (this) {
     is UtExecutionSuccess -> Result.success(transform(model))
     is UtExecutionFailure -> Result.failure(exception)
+    is UtExecutionSuccessConcrete -> Result.success(transform(UtNullModel(Any::class.java.id)))
 }
 
 /**
