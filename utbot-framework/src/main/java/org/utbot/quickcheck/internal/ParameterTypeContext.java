@@ -1,38 +1,10 @@
-/*
- The MIT License
 
- Copyright (c) 2010-2021 Paul R. Holser, Jr.
-
- Permission is hereby granted, free of charge, to any person obtaining
- a copy of this software and associated documentation files (the
- "Software"), to deal in the Software without restriction, including
- without limitation the rights to use, copy, modify, merge, publish,
- distribute, sublicense, and/or sell copies of the Software, and to
- permit persons to whom the Software is furnished to do so, subject to
- the following conditions:
-
- The above copyright notice and this permission notice shall be
- included in all copies or substantial portions of the Software.
-
- THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
- EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
- MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
- NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
- LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
- OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
- WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-*/
 
 package org.utbot.quickcheck.internal;
 
-import org.utbot.quickcheck.From;
-import org.utbot.quickcheck.Produced;
-import org.utbot.quickcheck.generator.Generator;
-import org.utbot.quickcheck.internal.ReflectionException;
-import org.utbot.quickcheck.internal.Weighted;
-import org.utbot.quickcheck.internal.Zilch;
-import org.utbot.quickcheck.random.SourceOfRandomness;
 import org.javaruntype.type.*;
+import org.utbot.quickcheck.generator.Generator;
+import org.utbot.quickcheck.random.SourceOfRandomness;
 import ru.vyarus.java.generics.resolver.GenericsResolver;
 import ru.vyarus.java.generics.resolver.context.ConstructorGenericsContext;
 import ru.vyarus.java.generics.resolver.context.GenericsContext;
@@ -40,13 +12,15 @@ import ru.vyarus.java.generics.resolver.context.MethodGenericsContext;
 
 import java.lang.reflect.Type;
 import java.lang.reflect.*;
-import java.util.*;
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Set;
 
-import static org.utbot.quickcheck.internal.Items.choose;
-import static org.utbot.quickcheck.internal.Reflection.*;
-import static java.lang.String.format;
 import static java.util.Collections.unmodifiableList;
 import static org.javaruntype.type.Types.arrayComponentOf;
+import static org.utbot.quickcheck.internal.Items.choose;
+import static org.utbot.quickcheck.internal.Reflection.*;
 
 public class ParameterTypeContext {
     private static final String EXPLICIT_GENERATOR_TYPE_MISMATCH_MESSAGE =
@@ -193,24 +167,6 @@ public class ParameterTypeContext {
 
     public ParameterTypeContext annotate(AnnotatedElement element) {
         this.annotatedElement = element;
-
-        List<Produced> producedGenerators =
-            allAnnotationsByType(element, Produced.class);
-
-        List<From> generators;
-        if (producedGenerators.size() == 1) {
-            generators = Arrays.asList(producedGenerators.get(0).value());
-        } else {
-            generators = allAnnotationsByType(element, From.class);
-            if (!generators.isEmpty()
-                && element instanceof AnnotatedWildcardType) {
-
-                throw new IllegalArgumentException(
-                    "Wildcards cannot be marked with @From");
-            }
-        }
-
-        addGenerators(generators);
         return this;
     }
 
@@ -248,14 +204,6 @@ public class ParameterTypeContext {
             argMethodGenerics);
     }
 
-    private void addGenerators(List<From> generators) {
-        for (From each : generators) {
-            Generator<?> generator = makeGenerator(each.value());
-            ensureCorrectType(generator);
-            explicits.add(new org.utbot.quickcheck.internal.Weighted<>(generator, each.frequency()));
-        }
-    }
-
     private Generator<?> makeGenerator(
         Class<? extends Generator> generatorType) {
 
@@ -278,21 +226,6 @@ public class ParameterTypeContext {
             return resolved.getRawClass();
 
         return (Class<?>) type();
-    }
-
-    private void ensureCorrectType(Generator<?> generator) {
-        for (Class<?> each : generator.types()) {
-            if (!maybeWrap(resolved.getRawClass())
-                .isAssignableFrom(maybeWrap(each))) {
-
-                throw new IllegalArgumentException(
-                    format(
-                        EXPLICIT_GENERATOR_TYPE_MISMATCH_MESSAGE,
-                        each,
-                        From.class.getName(),
-                        parameterName));
-            }
-        }
     }
 
     public String name() {
