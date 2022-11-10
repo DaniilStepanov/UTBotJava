@@ -15,14 +15,14 @@ class ClassesInstanceGenerator(
     private val genStatus: GenerationStatus,
     private val depth: Int
 ): InstanceGenerator {
-    override fun generate(): UtModel? {
+    override fun generate(): UtModel {
         val typeOfGenerations = when (generationMethod) {
             GenerationMethod.CONSTRUCTOR -> mutableListOf('c')
             GenerationMethod.STATIC -> mutableListOf('s')
             else -> mutableListOf('c', 'c', 's')
         }
         while (typeOfGenerations.isNotEmpty()) {
-            val randomTypeOfGeneration = typeOfGenerations.randomOrNull() ?: return null
+            val randomTypeOfGeneration = typeOfGenerations.randomOrNull() ?: return TODO("null")
             logger.debug { "Type of generation: $randomTypeOfGeneration" }
             val generatedInstance =
                 when (randomTypeOfGeneration) {
@@ -45,6 +45,6 @@ class ClassesInstanceGenerator(
                 }
             generatedInstance?.let { return it } ?: typeOfGenerations.removeIf { it == randomTypeOfGeneration }
         }
-        return null
+        return TODO("null")
     }
 }

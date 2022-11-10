@@ -17,9 +17,9 @@ class InterfaceImplementationsInstanceGenerator(
     private val generationStatus: GenerationStatus,
     private val depth: Int
 ) : InstanceGenerator {
-    override fun generate(): UtModel? {
+    override fun generate(): UtModel {
         //Try to generate with statics with some probability
-        val clazz = resolvedType.toClass() ?: return null
+        val clazz = resolvedType.toClass() ?: return TODO("null")
         if (Random.getTrue(50)) {
             StaticsBasedInstanceGenerator(
                 clazz,
@@ -31,7 +31,7 @@ class InterfaceImplementationsInstanceGenerator(
                 return it
             }
         }
-        val genericsContext = getRandomImplementerGenericContext(clazz, resolvedType) ?: return null
+        val genericsContext = getRandomImplementerGenericContext(clazz, resolvedType) ?: return TODO("null")
         return ClassesInstanceGenerator(
             genericsContext.currentClass(),
             genericsContext,

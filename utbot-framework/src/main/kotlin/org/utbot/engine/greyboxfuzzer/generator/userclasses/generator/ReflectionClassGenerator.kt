@@ -8,8 +8,8 @@ import org.utbot.quickcheck.internal.ParameterTypeContext
 class ReflectionClassGenerator(
     private val parameterTypeContext: ParameterTypeContext
 ) : InstanceGenerator {
-    override fun generate(): UtModel? =
+    override fun generate(): UtModel =
         parameterTypeContext.resolved.typeParameters.randomOrNull()?.type?.componentClass?.let {
             UtModelGenerator.utModelConstructor.construct(it, Class::class.java.id)
-        }
+        } ?: TODO("null")
 }

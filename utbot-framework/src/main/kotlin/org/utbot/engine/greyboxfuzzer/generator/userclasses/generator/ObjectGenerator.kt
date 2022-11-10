@@ -9,12 +9,12 @@ class ObjectGenerator(
     private val sourceOfRandomness: SourceOfRandomness,
     private val generationStatus: GenerationStatus
 ): InstanceGenerator {
-    override fun generate(): UtModel? =
+    override fun generate(): UtModel =
         GreyBoxFuzzerGenerators.generatorRepository
-            .generators
+            .getGenerators()
             .toList()
             .flatMap { it.second }
             .filter { !it.hasComponents() }
             .randomOrNull()
-            ?.generate(sourceOfRandomness, generationStatus)
+            ?.generate(sourceOfRandomness, generationStatus) ?: TODO("null")
 }
