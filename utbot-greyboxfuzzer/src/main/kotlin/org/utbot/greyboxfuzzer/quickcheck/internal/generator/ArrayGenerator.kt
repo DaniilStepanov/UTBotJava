@@ -1,19 +1,18 @@
 package org.utbot.greyboxfuzzer.quickcheck.internal.generator
 
+import org.utbot.framework.plugin.api.*
 import org.utbot.greyboxfuzzer.generator.GeneratorConfigurator
 import org.utbot.greyboxfuzzer.util.FuzzerIllegalStateException
 import org.utbot.greyboxfuzzer.quickcheck.generator.GeneratorContext
 import org.utbot.greyboxfuzzer.util.classIdForType
-import org.utbot.framework.plugin.api.ClassId
-import org.utbot.framework.plugin.api.UtArrayModel
-import org.utbot.framework.plugin.api.UtModel
-import org.utbot.framework.plugin.api.getIdOrThrow
 import org.utbot.framework.plugin.api.util.*
 import org.utbot.greyboxfuzzer.quickcheck.generator.*
 import org.utbot.greyboxfuzzer.quickcheck.internal.Ranges
 import org.utbot.greyboxfuzzer.quickcheck.internal.Reflection
 import org.utbot.greyboxfuzzer.quickcheck.random.SourceOfRandomness
+import org.utbot.greyboxfuzzer.util.getTrue
 import java.lang.reflect.AnnotatedType
+import kotlin.random.Random
 
 class ArrayGenerator(private val componentType: Class<*>, val component: Generator) : Generator(Any::class.java) {
     private var lengthRange: Size? = null
@@ -80,6 +79,7 @@ class ArrayGenerator(private val componentType: Class<*>, val component: Generat
         random: SourceOfRandomness,
         status: GenerationStatus
     ): UtModel {
+        if (Random.getTrue(5)) return UtNullModel(getClassIdForArrayType(componentType))
         nestedGenerators.clear()
         val length = length(random, status)
         val componentTypeId = classIdForType(componentType)

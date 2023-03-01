@@ -200,7 +200,7 @@ class DistanceStatistics(
             }
         }
 
-    private fun updateDistanceToUncovered() =
+    internal fun updateDistanceToUncovered() =
         distanceToClosestUncovered.replaceAll { u, value ->
             if (value == Int.MAX_VALUE) {
                 value

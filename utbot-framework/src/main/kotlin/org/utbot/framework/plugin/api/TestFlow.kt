@@ -1,9 +1,6 @@
 package org.utbot.framework.plugin.api
 
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.emptyFlow
-import kotlinx.coroutines.flow.flattenConcat
-import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.*
 import org.utbot.engine.UtBotSymbolicEngine
 import org.utbot.framework.UtSettings
 
@@ -61,7 +58,12 @@ class TestFlow internal constructor(block: TestFlow.() -> Unit) {
     fun build(engine: UtBotSymbolicEngine): Flow<UtResult>  {
         return when {
             generationTimeout == 0L -> emptyFlow()
-            isGreyBoxFuzzingEnabled -> engine.greyBoxFuzzing(generationTimeout)
+            isGreyBoxFuzzingEnabled -> {
+                flowOf(
+                    engine.greyBoxFuzzing(30_000L),
+                    engine.traverse()
+                ).flattenConcat()
+            }
             isFuzzingEnabled -> {
                 when (val value = if (isSymbolicEngineEnabled) (fuzzingValue * generationTimeout).toLong() else generationTimeout) {
                     0L -> engine.traverse()

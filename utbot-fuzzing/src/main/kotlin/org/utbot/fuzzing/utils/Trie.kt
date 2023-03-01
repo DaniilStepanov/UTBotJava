@@ -49,6 +49,19 @@ open class Trie<T, K>(
         return node
     }
 
+    fun findPrefix(values: Iterable<T>): Boolean {
+        val root = try { values.first() } catch (e: NoSuchElementException) {
+            return false
+        }
+        val key = keyExtractor(root)
+        val rootNode = roots[key] ?: return false
+        var nodeChildren = rootNode.children
+        values.drop(1).map { value ->
+            val n = keyExtractor(value)
+            nodeChildren = nodeChildren[n]?.children ?: return false
+        }
+        return true
+    }
     /**
      * Decreases node counter value or removes the value completely if `counter == 1`.
      *

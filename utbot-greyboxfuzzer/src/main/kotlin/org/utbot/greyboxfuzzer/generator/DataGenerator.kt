@@ -14,11 +14,16 @@ import org.utbot.framework.plugin.api.util.id
 import org.utbot.framework.plugin.api.util.jClass
 import org.utbot.greyboxfuzzer.quickcheck.generator.GenerationState
 import org.utbot.greyboxfuzzer.quickcheck.generator.GeneratorContext
+import ru.vyarus.java.generics.resolver.context.GenericsInfoFactory
 import java.lang.reflect.Parameter
 
 object DataGenerator {
 
     private val generatorRepository = GreyBoxFuzzerGeneratorsAndSettings.generatorRepository
+
+    init {
+        GenericsInfoFactory.disableCache()
+    }
 
     fun generateUtModel(
         parameterTypeContext: ParameterTypeContext,

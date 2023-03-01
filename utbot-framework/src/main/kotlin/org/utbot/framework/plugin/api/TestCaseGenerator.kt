@@ -151,6 +151,7 @@ open class TestCaseGenerator(
             runBlockingWithCancellationPredicate(isCanceled) {
                 for ((method, controller) in method2controller) {
                     controller.job = launch(currentUtContext) {
+                        if (method.name != "divide") return@launch
                         if (!isActive) return@launch
 
                         try {

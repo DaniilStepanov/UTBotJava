@@ -41,6 +41,9 @@ object OpenModulesContainer {
             openPackage("java.base", "jdk.internal.util.xml.impl")
             openPackage("java.base", "jdk.internal.vm")
             openPackage("java.base", "jdk.internal.vm.annotation")
+            openPackage("java.base", "java.util.concurrent.atomic")
+            openPackage("java.base", "java.io")
+            openPackage("java.base", "java.util.zip")
             add("--illegal-access=warn")
         }
     }

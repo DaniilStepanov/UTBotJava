@@ -43,7 +43,6 @@ import org.utbot.framework.util.sootMethod
 import org.utbot.fuzzer.*
 import org.utbot.fuzzing.*
 import org.utbot.fuzzing.utils.Trie
-import org.utbot.greyboxfuzzer.GreyBoxFuzzer
 import org.utbot.greyboxfuzzer.util.FuzzerUtModelConstructor
 import org.utbot.instrumentation.ConcreteExecutor
 import org.utbot.instrumentation.instrumentation.execution.UtConcreteExecutionData
@@ -443,6 +442,7 @@ class UtBotSymbolicEngine(
                     GreyBoxFuzzer(
                         methodUnderTest,
                         collectConstantsForGreyBoxFuzzer(methodUnderTest.sootMethod, utModelConstructor),
+                        globalGraph,
                         fuzzerUtModelConstructor,
                         FuzzerConcreteExecutor(
                             concreteExecutor.pathsToUserClasses

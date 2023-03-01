@@ -1,9 +1,13 @@
 package org.utbot.engine
 
+import org.utbot.engine.selectors.strategies.DistanceStatistics
+import org.utbot.engine.selectors.strategies.GeneratedTestCountingStatistics
 import org.utbot.engine.selectors.strategies.TraverseGraphStatistics
 import org.utbot.engine.state.CALL_DECISION_NUM
 import org.utbot.engine.state.Edge
 import org.utbot.engine.state.ExecutionState
+import org.utbot.fuzzing.utils.IdentityTrie
+import org.utbot.fuzzing.utils.Trie
 import soot.SootClass
 import soot.SootMethod
 import soot.jimple.Stmt
@@ -65,7 +69,11 @@ class InterProceduralUnitGraph(graph: ExceptionalUnitGraph) {
     private val allEdgesCount: MutableMap<Stmt, Int> = graph.outgoingEdgesCount
     private val outgoingEdgesCount: MutableMap<Stmt, Int> = graph.outgoingEdgesCount
 
+    internal val coveredPaths = IdentityTrie<Stmt>()
+
     fun method(stmt: Stmt): SootMethod = stmtToGraph[stmt]?.body?.method ?: error("$stmt not in graph.")
+
+    fun graph(stmt: Stmt): ExceptionalUnitGraph? = stmtToGraph[stmt]
 
     /**
      * @return all unexceptional successors of stmt
@@ -193,6 +201,34 @@ class InterProceduralUnitGraph(graph: ExceptionalUnitGraph) {
             it.onTraversed(executionState)
         }
     }
+
+    /**
+     * mark that executionState is successfully and completely traversed
+     */
+    fun traversed(stmt: Stmt, edges: Set<Edge>) {
+        attachAllowed = false
+        coveredOutgoingEdges.putIfAbsent(stmt, 0)
+        for (edge in edges) {
+            markAsCoveredStmt(edge.src)
+            markAsCoveredStmt(edge.dst)
+
+            when (edge) {
+                in implicitEdges -> coveredImplicitEdges += edge
+                !in registeredEdges, !in coveredEdges-> {
+                    coveredOutgoingEdges.putIfAbsent(edge.src, 0)
+                    coveredOutgoingEdges.compute(edge.src) { _, value -> (value ?: 0) + 1 }
+                    coveredEdges += edge
+                }
+            }
+        }
+        statistics.forEach {
+            when (it) {
+                is DistanceStatistics -> it.updateDistanceToUncovered()
+                is GeneratedTestCountingStatistics -> it.generatedTestsCount++
+            }
+        }
+    }
+
 
     /**
      * Returns uncovered throw statements for [this] method.

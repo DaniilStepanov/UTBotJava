@@ -66,8 +66,21 @@ abstract class BasePathSelector(
     /**
      * check fast unsat on forks
      */
-    private fun checkUnsatIfFork(state: ExecutionState) =
-        state.path.isNotEmpty() && choosingStrategy.graph.isFork(state.path.last()) && checkUnsat(state.solver)
+    private fun checkUnsatIfFork(state: ExecutionState): Boolean {
+        //if this path is covered by fuzzing then false
+        if (state.path.isEmpty() || !choosingStrategy.graph.isFork(state.path.last())) return false
+        val firstEdgeOfPath = state.path.first()
+        val methodGraph = choosingStrategy.graph.graph(firstEdgeOfPath)
+        if (methodGraph != null) {
+            val newPath = state.path
+                .filter { it in methodGraph }
+                .zipWithNext()
+                .filter { it.first != it.second }
+                .map { it.first }
+            if (choosingStrategy.graph.coveredPaths.findPrefix(newPath)) return false
+        }
+        return checkUnsat(state.solver)
+    }
 
     override fun poll(): ExecutionState? {
         if (stoppingStrategy.shouldStop()) {

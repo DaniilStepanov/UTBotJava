@@ -230,7 +230,7 @@ data class UtSolver constructor(
                     val str = z3Solver.toString()
                     "${str.md5()}\n$str"
                 }
-
+                println("SOLVER!!")
                 when (val status = check(translatedSoft, translatedAssumes)) {
                     SAT -> UtSolverStatusSAT(translator, z3Solver)
                     else -> UtSolverStatusUNSAT(status)

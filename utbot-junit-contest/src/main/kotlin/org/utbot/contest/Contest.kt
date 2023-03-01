@@ -185,7 +185,7 @@ fun setOptions() {
     UtSettings.testMinimizationStrategyType = TestSelectionStrategyType.COVERAGE_STRATEGY
     UtSettings.ignoreStringLiterals = true
     UtSettings.maximizeCoverageUsingReflection = true
-    UtSettings.useSandbox = false
+    UtSettings.useSandbox = true
 }
 
 

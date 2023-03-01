@@ -84,6 +84,7 @@ private fun initSoot(buildDirs: List<Path>, classpath: String?, jdkInfo: JdkInfo
          */
         set_allow_phantom_refs(true) // Java8 related
         set_full_resolver(true)
+        set_drop_bodies_after_load(false)
     }
 
     addBasicClasses(*classesToLoad)

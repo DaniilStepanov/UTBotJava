@@ -71,6 +71,7 @@ interface UtExecutionInstrumentationWithStatsCollection : Instrumentation<UtFuzz
     ): ByteArray {
         val instrumenter = Instrumenter(classfileBuffer, loader)
 
+        traceHandler.instrumenter = instrumenter
         traceHandler.registerClass(className)
         instrumenter.visitInstructions(traceHandler.computeInstructionVisitor(className))
 

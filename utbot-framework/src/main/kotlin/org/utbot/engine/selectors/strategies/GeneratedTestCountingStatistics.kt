@@ -7,7 +7,7 @@ class GeneratedTestCountingStatistics(
     graph: InterProceduralUnitGraph
 ) : TraverseGraphStatistics(graph) {
     var generatedTestsCount = 0
-        private set
+        internal set
 
     override fun onTraversed(executionState: ExecutionState) {
         generatedTestsCount++
